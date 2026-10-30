@@ -42,7 +42,7 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | Maintenance-payment tracking | Built (paid/pending, totals, mark paid, duplicate-bill guard) |
 | Parking and vehicle management | Built (allocate/release, type compatibility, no double allocation) |
 | Search / filter | Built (search box, filters and pagination on every list) |
-| Test database operations and relationships | Built: 21 unit tests plus 10 integration tests that run against live MySQL and MongoDB |
+| Test database operations and relationships | Built: 21 unit tests plus 11 integration tests that run against live MySQL and MongoDB |
 | Integrate all modules into the final system | Built and run end to end (migration, seed, login, every list endpoint and page) |
 
 ### Verification
@@ -52,9 +52,9 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | `npm run lint` | passes |
 | `npm run typecheck` | passes |
 | `npm run build` | passes |
-| `npm test` | 21 unit tests pass (10 integration tests are skipped unless a database is available) |
+| `npm test` | 21 unit tests pass (11 integration tests are skipped unless a database is available) |
 | `npm run db:setup` | migrations, Mongo indexes and seed run cleanly on live MySQL and MongoDB |
-| `npm run test:integration` | 10 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation |
+| `npm run test:integration` | 11 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation, DB-backed login throttle |
 | Smoke test of `next start` | login works, bad password gives 401, all list endpoints and pages return 200 |
 | CI | `.github/workflows/ci.yml` runs lint, typecheck, tests, build, `db:setup` and the integration tests against MySQL and MongoDB service containers |
 
@@ -71,7 +71,8 @@ Every row they create is removed again afterwards.
 ### Still open
 
 1. **Compare with the team's own ER diagram.** The diagram was not in the repository, so [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) contains one generated from the deployed schema and a rule-by-rule check against section 4 of the implementation guide (all rules pass; no conflicts to report). A teammate only needs to overlay it on their diagram.
-2. **Optional scale work.** Dropdowns load at most 200 options (searchable pickers would be needed for a very large society), and login throttling is per server process rather than shared.
+
+Nothing else from the original remaining-work list is open.
 
 ---
 
@@ -719,8 +720,8 @@ More design detail and the feature checklist: [docs/ARCHITECTURE.md](docs/ARCHIT
 
 - Academic demo: no payment gateway, no email/SMS, no chat, no biometric or hardware integration, no AI features.
 - Sessions are JWT cookies lasting 8 hours. Logout revokes every token issued to that account up to that moment (`UserAccount.sessions_valid_after`), which also signs the same account out on other devices. Deactivating an account takes effect immediately because the account is re-checked on every request.
-- Login throttling is in memory per server process.
-- Dropdowns load at most 200 options.
+- Login throttling is stored in MySQL (`LoginAttempt`): 5 failures per identifier per 15 minutes, shared by every server process.
+- Dropdowns load every record (up to 5,000) and get a filter box above 10 options; beyond 5,000 rows a server-side search picker would be needed.
 - Writes that touch both databases are not atomic (see section 6).
 - "Visitors today" uses the server's local midnight.
 - Not claimed to meet any production security or compliance standard.

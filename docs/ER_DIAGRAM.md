@@ -111,5 +111,6 @@ Checked by introspecting the live MySQL database (`information_schema`) after `n
 | --- | --- |
 | `20261030000000_init` | The full schema, including `UserAccount` |
 | `20261030010000_session_revocation` | Adds nullable `UserAccount.sessions_valid_after` so logout can revoke issued tokens |
+| `20261030020000_login_throttle` | Adds standalone `LoginAttempt` table (no foreign keys) for the shared sign-in throttle |
 
 No conflicts with the guide were found, so there is nothing to stop and report.

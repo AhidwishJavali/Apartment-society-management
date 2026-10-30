@@ -38,6 +38,29 @@ export function buildPayload(fields: FieldDef[], values: FormValues, mode: "crea
   return payload;
 }
 
+/** Plain select that gains a type-to-filter box once the list is long. */
+function FilterSelect({ id, def, value, onChange }: { id: string; def: FieldDef; value: string; onChange: (v: string) => void }) {
+  const [filter, setFilter] = useState("");
+  const all = def.options ?? [];
+  const needle = filter.trim().toLowerCase();
+  const shown = needle ? all.filter((o) => o.label.toLowerCase().includes(needle) || String(o.value) === value) : all;
+  return (
+    <div className="space-y-1">
+      {all.length > 10 && (
+        <input type="search" className={inputClass} placeholder={`Filter ${all.length} options…`} aria-label={`Filter ${def.label}`} value={filter} onChange={(e) => setFilter(e.target.value)} />
+      )}
+      <select id={id} className={inputClass} required={def.required} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{def.required ? "Select…" : "None"}</option>
+        {shown.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function DependentSelect({ id, def, parentValue, value, onChange }: { id: string; def: FieldDef; parentValue: string; value: string; onChange: (v: string) => void }) {
   const [options, setOptions] = useState<Option[]>([]);
   const endpoint = def.optionsFrom?.endpoint;
@@ -133,14 +156,7 @@ export function ResourceForm({
               f.type === "select" && f.optionsFrom ? (
                 <DependentSelect id={id} def={f} parentValue={String(values[f.optionsFrom.field] ?? "")} value={String(values[f.name])} onChange={set} />
               ) : f.type === "select" ? (
-                <select id={id} className={inputClass} required={f.required} value={String(values[f.name])} onChange={(e) => set(e.target.value)}>
-                  <option value="">{f.required ? "Select…" : "None"}</option>
-                  {f.options?.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                <FilterSelect id={id} def={f} value={String(values[f.name])} onChange={set} />
               ) : f.type === "textarea" ? (
                 <textarea id={id} rows={3} className={inputClass} required={f.required} placeholder={f.placeholder} value={String(values[f.name])} onChange={(e) => set(e.target.value)} />
               ) : (

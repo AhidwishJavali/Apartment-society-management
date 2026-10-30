@@ -36,15 +36,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return <SessionContext.Provider value={user}>{children}</SessionContext.Provider>;
 }
 
-/** Loads select options from a list endpoint (first 200 rows). */
+/** Loads select options from a list endpoint, following every page (up to 25 pages of 200). */
 export function useOptions(endpoint: string | null, toOption: (row: Record<string, unknown>) => Option): Option[] {
   const [options, setOptions] = useState<Option[]>([]);
   useEffect(() => {
     if (!endpoint) return;
     let cancelled = false;
-    api<Record<string, unknown>[]>(`${endpoint}${endpoint.includes("?") ? "&" : "?"}pageSize=200`)
-      .then((r) => !cancelled && setOptions(r.data.map(toOption)))
-      .catch(() => !cancelled && setOptions([]));
+    (async () => {
+      const rows: Record<string, unknown>[] = [];
+      let totalPages = 1;
+      for (let page = 1; page <= Math.min(totalPages, 25); page++) {
+        const r = await api<Record<string, unknown>[]>(`${endpoint}${endpoint.includes("?") ? "&" : "?"}pageSize=200&page=${page}`);
+        rows.push(...r.data);
+        totalPages = Number((r.meta as { totalPages?: number } | undefined)?.totalPages ?? 1);
+      }
+      if (!cancelled) setOptions(rows.map(toOption));
+    })().catch(() => !cancelled && setOptions([]));
     return () => {
       cancelled = true;
     };

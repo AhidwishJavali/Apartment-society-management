@@ -188,3 +188,12 @@ model UserAccount {
 
   @@map("UserAccount")
 }
+
+// Failed sign-in counter shared by every server process.
+model LoginAttempt {
+  identifier String   @id @db.VarChar(100)
+  failures   Int      @default(0)
+  resetAt    DateTime @map("reset_at")
+
+  @@map("LoginAttempt")
+}

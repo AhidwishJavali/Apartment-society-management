@@ -98,6 +98,7 @@ async function confirmReset() {
 
 async function wipe() {
   await prisma.$transaction([
+    prisma.loginAttempt.deleteMany(),
     prisma.userAccount.deleteMany(),
     prisma.complaint.deleteMany(),
     prisma.vehicle.deleteMany(),
