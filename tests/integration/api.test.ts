@@ -18,13 +18,13 @@ const d = describe.skipIf(!enabled);
 
 type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 
-async function call(handler: Handler, method: string, url: string, body?: unknown, params: Record<string, string> = {}) {
+async function call(route: unknown, method: string, url: string, body?: unknown, params: Record<string, string> = {}) {
   const req = new NextRequest(`http://localhost${url}`, {
     method,
     headers: { "content-type": "application/json", host: "localhost" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const res = await handler(req, { params: Promise.resolve(params) });
+  const res = await (route as Handler)(req, { params: Promise.resolve(params) });
   return { status: res.status, json: (await res.json()) as any };
 }
 
@@ -79,15 +79,15 @@ d("API against live databases", () => {
   it("rejects unauthenticated requests with 401", async () => {
     jar.token = undefined;
     const { GET } = await import("@/app/api/payments/route");
-    expect((await call(GET as Handler, "GET", "/api/payments")).status).toBe(401);
+    expect((await call(GET, "GET", "/api/payments")).status).toBe(401);
   });
 
   it("rejects a duplicate monthly bill with 409", async () => {
     await as(adminId, "ADMIN");
     const { POST } = await import("@/app/api/payments/route");
     const bill = { apartmentId: apt, amount: 2500, paymentMonth: "2031-01", status: "PENDING" };
-    expect((await call(POST as Handler, "POST", "/api/payments", bill)).status).toBe(201);
-    const dup = await call(POST as Handler, "POST", "/api/payments", bill);
+    expect((await call(POST, "POST", "/api/payments", bill)).status).toBe(201);
+    const dup = await call(POST, "POST", "/api/payments", bill);
     expect(dup.status).toBe(409);
     expect(await prisma.maintenancePayment.count({ where: { apartmentId: apt } })).toBe(1);
   });
@@ -95,18 +95,18 @@ d("API against live databases", () => {
   it("validates payment state (PAID needs a date)", async () => {
     await as(adminId, "ADMIN");
     const { POST } = await import("@/app/api/payments/route");
-    const res = await call(POST as Handler, "POST", "/api/payments", { apartmentId: apt, amount: 10, paymentMonth: "2031-02", status: "PAID" });
+    const res = await call(POST, "POST", "/api/payments", { apartmentId: apt, amount: 10, paymentMonth: "2031-02", status: "PAID" });
     expect(res.status).toBe(400);
   });
 
   it("denies payments to security (403) and scopes residents to their own flat", async () => {
     const { GET } = await import("@/app/api/payments/route");
     await as(securityId, "SECURITY");
-    expect((await call(GET as Handler, "GET", "/api/payments")).status).toBe(403);
+    expect((await call(GET, "GET", "/api/payments")).status).toBe(403);
 
     await as(residentUserId, "RESIDENT");
     const own = await prisma.userAccount.findUniqueOrThrow({ where: { id: residentUserId }, include: { resident: true } });
-    const res = await call(GET as Handler, "GET", `/api/payments?apartmentId=${apt}&pageSize=100`);
+    const res = await call(GET, "GET", `/api/payments?apartmentId=${apt}&pageSize=100`);
     expect(res.status).toBe(200);
     expect(res.json.data.every((p: { apartmentId: number }) => p.apartmentId === own.resident!.apartmentId)).toBe(true);
     expect(res.json.data.some((p: { apartmentId: number }) => p.apartmentId === apt)).toBe(false);
@@ -118,7 +118,7 @@ d("API against live databases", () => {
       const parking = await import("@/app/api/parking/route");
       const parkingId = await import("@/app/api/parking/[id]/route");
 
-      const car = await call(parking.POST as Handler, "POST", "/api/parking", { slotNumber: `${tag}C`, vehicleType: "CAR" });
+      const car = await call(parking.POST, "POST", "/api/parking", { slotNumber: `${tag}C`, vehicleType: "CAR" });
       expect(car.status).toBe(201);
       ids.slots.push(car.json.data.id);
 
@@ -130,7 +130,7 @@ d("API against live databases", () => {
       ids.vehicles.push(bike.id, car1.id, car2.id);
 
       const slot = String(car.json.data.id);
-      const patch = (vehicleId: number) => call(parkingId.PATCH as Handler, "PATCH", `/api/parking/${slot}`, { action: "allocate", vehicleId }, { id: slot });
+      const patch = (vehicleId: number) => call(parkingId.PATCH, "PATCH", `/api/parking/${slot}`, { action: "allocate", vehicleId }, { id: slot });
 
       expect((await patch(bike.id)).status).toBe(400); // bike into car slot
       expect((await patch(car1.id)).status).toBe(200);
@@ -139,8 +139,8 @@ d("API against live databases", () => {
       const held = await prisma.vehicle.findUniqueOrThrow({ where: { id: car1.id } });
       expect(held.parkingId).toBe(car.json.data.id);
 
-      expect((await call(parkingId.DELETE as Handler, "DELETE", `/api/parking/${slot}`, undefined, { id: slot })).status).toBe(409);
-      const rel = await call(parkingId.PATCH as Handler, "PATCH", `/api/parking/${slot}`, { action: "release" }, { id: slot });
+      expect((await call(parkingId.DELETE, "DELETE", `/api/parking/${slot}`, undefined, { id: slot })).status).toBe(409);
+      const rel = await call(parkingId.PATCH, "PATCH", `/api/parking/${slot}`, { action: "release" }, { id: slot });
       expect(rel.json.data.status).toBe("AVAILABLE");
       expect((await prisma.vehicle.findUniqueOrThrow({ where: { id: car1.id } })).parkingId).toBeNull();
     });
@@ -156,7 +156,7 @@ d("API against live databases", () => {
       ids.vehicles.push(...vs.map((v) => v.id));
       const id = String(slotRow.id);
       const results = await Promise.all(
-        vs.map((v) => call(parkingId.PATCH as Handler, "PATCH", `/api/parking/${id}`, { action: "allocate", vehicleId: v.id }, { id })),
+        vs.map((v) => call(parkingId.PATCH, "PATCH", `/api/parking/${id}`, { action: "allocate", vehicleId: v.id }, { id })),
       );
       expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
     });
@@ -167,34 +167,34 @@ d("API against live databases", () => {
     const one = await import("@/app/api/complaints/[id]/route");
 
     await as(residentUserId, "RESIDENT");
-    const filed = await call(complaints.POST as Handler, "POST", "/api/complaints", { category: "Plumbing", description: `${tag} leaking tap in kitchen` });
+    const filed = await call(complaints.POST, "POST", "/api/complaints", { category: "Plumbing", description: `${tag} leaking tap in kitchen` });
     expect(filed.status).toBe(201);
     const id = String(filed.json.data.id);
     ids.complaints.push(filed.json.data.id);
     const p = { id };
 
     // Residents cannot assign or change status.
-    expect((await call(one.PATCH as Handler, "PATCH", `/api/complaints/${id}`, { action: "assign", staffId }, p)).status).toBe(403);
+    expect((await call(one.PATCH, "PATCH", `/api/complaints/${id}`, { action: "assign", staffId }, p)).status).toBe(403);
 
     // Status change before assignment is refused.
     await as(adminId, "ADMIN");
-    expect((await call(one.PATCH as Handler, "PATCH", `/api/complaints/${id}`, { action: "status", status: "RESOLVED" }, p)).status).toBe(400);
+    expect((await call(one.PATCH, "PATCH", `/api/complaints/${id}`, { action: "status", status: "RESOLVED" }, p)).status).toBe(400);
 
     // Maintenance cannot see a complaint that is not assigned to them.
     await as(maintId, "MAINTENANCE");
-    expect((await call(one.GET as Handler, "GET", `/api/complaints/${id}`, undefined, p)).status).toBe(403);
+    expect((await call(one.GET, "GET", `/api/complaints/${id}`, undefined, p)).status).toBe(403);
 
     await as(adminId, "ADMIN");
-    const assigned = await call(one.PATCH as Handler, "PATCH", `/api/complaints/${id}`, { action: "assign", staffId }, p);
+    const assigned = await call(one.PATCH, "PATCH", `/api/complaints/${id}`, { action: "assign", staffId }, p);
     expect(assigned.status).toBe(200);
     expect(assigned.json.data.status).toBe("IN_PROGRESS");
 
     await as(maintId, "MAINTENANCE");
-    const resolved = await call(one.PATCH as Handler, "PATCH", `/api/complaints/${id}`, { action: "status", status: "RESOLVED", note: "Washer replaced" }, p);
+    const resolved = await call(one.PATCH, "PATCH", `/api/complaints/${id}`, { action: "status", status: "RESOLVED", note: "Washer replaced" }, p);
     expect(resolved.status).toBe(200);
 
     await as(residentUserId, "RESIDENT");
-    const view = await call(one.GET as Handler, "GET", `/api/complaints/${id}`, undefined, p);
+    const view = await call(one.GET, "GET", `/api/complaints/${id}`, undefined, p);
     expect(view.status).toBe(200);
     expect(view.json.data.activityAvailable).toBe(true);
     expect(view.json.data.activity.map((a: { action: string }) => a.action)).toEqual(["CREATED", "ASSIGNED", "STATUS_CHANGED"]);
@@ -205,10 +205,10 @@ d("API against live databases", () => {
     const one = await import("@/app/api/visitors/[id]/route");
     await as(securityId, "SECURITY");
 
-    const bad = await call(visitors.POST as Handler, "POST", "/api/visitors", { visitorName: `${tag} V`, purpose: "Delivery", apartmentId: apt, hostResidentId: 999999999 });
+    const bad = await call(visitors.POST, "POST", "/api/visitors", { visitorName: `${tag} V`, purpose: "Delivery", apartmentId: apt, hostResidentId: 999999999 });
     expect(bad.status).toBe(400);
 
-    const made = await call(visitors.POST as Handler, "POST", "/api/visitors", {
+    const made = await call(visitors.POST, "POST", "/api/visitors", {
       visitorName: `${tag} Visitor`, purpose: "Delivery", apartmentId: apt, hostResidentId: otherResident,
     });
     expect(made.status).toBe(201);
@@ -216,23 +216,23 @@ d("API against live databases", () => {
     const id = made.json.data.id as string;
     visitorIds.push(id);
 
-    const first = await call(one.PATCH as Handler, "PATCH", `/api/visitors/${id}`, { action: "exit" }, { id });
+    const first = await call(one.PATCH, "PATCH", `/api/visitors/${id}`, { action: "exit" }, { id });
     expect(first.status).toBe(200);
     expect(first.json.data.status).toBe("EXITED");
-    expect((await call(one.PATCH as Handler, "PATCH", `/api/visitors/${id}`, { action: "exit" }, { id })).status).toBe(409);
+    expect((await call(one.PATCH, "PATCH", `/api/visitors/${id}`, { action: "exit" }, { id })).status).toBe(409);
 
     await as(residentUserId, "RESIDENT");
-    expect((await call(visitors.GET as Handler, "GET", "/api/visitors")).status).toBe(403);
+    expect((await call(visitors.GET, "GET", "/api/visitors")).status).toBe(403);
   });
 
   it("lists host residents for security but only id and name", async () => {
     const { GET } = await import("@/app/api/residents/hosts/route");
     await as(securityId, "SECURITY");
-    const res = await call(GET as Handler, "GET", `/api/residents/hosts?apartmentId=${apt}`);
+    const res = await call(GET, "GET", `/api/residents/hosts?apartmentId=${apt}`);
     expect(res.status).toBe(200);
     expect(res.json.data).toEqual([{ id: otherResident, name: `${tag} Host` }]);
     await as(residentUserId, "RESIDENT");
-    expect((await call(GET as Handler, "GET", `/api/residents/hosts?apartmentId=${apt}`)).status).toBe(403);
+    expect((await call(GET, "GET", `/api/residents/hosts?apartmentId=${apt}`)).status).toBe(403);
   });
 
   it("revokes the session on logout", async () => {
@@ -240,12 +240,12 @@ d("API against live databases", () => {
     const { POST: logout } = await import("@/app/api/auth/logout/route");
     await as(residentUserId, "RESIDENT");
     const stolen = jar.token;
-    expect((await call(GET as Handler, "GET", "/api/auth/session")).status).toBe(200);
-    await call(logout as unknown as Handler, "POST", "/api/auth/logout");
+    expect((await call(GET, "GET", "/api/auth/session")).status).toBe(200);
+    await call(logout, "POST", "/api/auth/logout");
     jar.token = stolen; // attacker replays the old cookie
-    expect((await call(GET as Handler, "GET", "/api/auth/session")).status).toBe(401);
+    expect((await call(GET, "GET", "/api/auth/session")).status).toBe(401);
     await new Promise((r) => setTimeout(r, 5));
     await as(residentUserId, "RESIDENT"); // a fresh login still works
-    expect((await call(GET as Handler, "GET", "/api/auth/session")).status).toBe(200);
+    expect((await call(GET, "GET", "/api/auth/session")).status).toBe(200);
   });
 });
