@@ -42,30 +42,36 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | Maintenance-payment tracking | Built (paid/pending, totals, mark paid, duplicate-bill guard) |
 | Parking and vehicle management | Built (allocate/release, type compatibility, no double allocation) |
 | Search / filter | Built (search box, filters and pagination on every list) |
-| Test database operations and relationships | **Partly done**: unit tests pass; live-database testing is still to do (see below) |
-| Integrate all modules into the final system | Built; needs the end-to-end run below |
+| Test database operations and relationships | Built: 21 unit tests plus 10 integration tests that run against live MySQL and MongoDB |
+| Integrate all modules into the final system | Built and run end to end (migration, seed, login, every list endpoint and page) |
 
-### Verification so far
+### Verification
 
 | Check | Result |
 | --- | --- |
 | `npm run lint` | passes |
 | `npm run typecheck` | passes |
 | `npm run build` | passes |
-| `npm test` | 21 unit tests pass (status transitions, audience rules, payment rules, validation schemas, session tokens, env validation) |
+| `npm test` | 21 unit tests pass (10 integration tests are skipped unless a database is available) |
+| `npm run db:setup` | migrations, Mongo indexes and seed run cleanly on live MySQL and MongoDB |
+| `npm run test:integration` | 10 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation |
+| Smoke test of `next start` | login works, bad password gives 401, all list endpoints and pages return 200 |
+| CI | `.github/workflows/ci.yml` runs lint, typecheck, tests, build, `db:setup` and the integration tests against MySQL and MongoDB service containers |
 
-### What is left
+### Run the integration tests
 
-These are the honest gaps. The first one matters most.
+They need the databases from [Quick start](#2-quick-start) (the seed must have been run, because they sign in as the demo accounts):
 
-1. **Run everything against live MySQL and MongoDB.** The code was written and compiled on a machine with neither database installed, so the migration, the seed script and every API workflow have **never been executed end to end**. Follow [Quick start](#2-quick-start), then the [acceptance walkthrough](#acceptance-walkthrough), and fix whatever turns up.
-2. **Compare the schema with the team's ER diagram.** The implementation guide says to stop and report any conflict with the ER diagram. That diagram was not in the repository, so the schema was built from the lab script (`db/lab_baseline.sql`) and the guide. Every deliberate change is listed in [Changes from the lab baseline](#changes-from-the-lab-baseline).
-3. **Automated integration tests.** There are no tests that hit a real database. Worth adding: duplicate monthly bill (409), parking double allocation under concurrency, complaint lifecycle, permission denials per role.
-4. **Small UI gaps.**
-   - The visitor entry form does not offer the optional "host resident" field the API already supports.
-   - Dropdowns load at most 200 options; a very large society would need searchable pickers.
-   - No charts (they were optional in the guide).
-5. **Optional hardening.** Session revocation on logout, persistent (Redis/DB) login throttling, CI workflow running `npm run check`.
+```bash
+npm run test:integration
+```
+
+Every row they create is removed again afterwards.
+
+### Still open
+
+1. **Compare the schema with the team's ER diagram.** The implementation guide says to stop and report any conflict with the ER diagram. That diagram was not in the repository, so the schema was built from the lab script (`db/lab_baseline.sql`) and the guide. Every deliberate change is listed in [Changes from the lab baseline](#changes-from-the-lab-baseline). This needs a person with the diagram.
+2. **Optional scale work.** Dropdowns load at most 200 options (searchable pickers would be needed for a very large society), and login throttling is per server process rather than shared.
 
 ---
 
@@ -660,7 +666,7 @@ Status codes: 200/201 success, 207 partial success, 400 validation, 401 not sign
 | --- | --- | --- |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` | public / any signed-in |
 | Apartments | `GET /api/apartments`, `POST`, `GET/PATCH/DELETE /api/apartments/:id` | admin (residents: own flat read; security: list read) |
-| Residents | `GET /api/residents`, `POST`, `GET/PATCH/DELETE /api/residents/:id` | admin (residents: own profile read) |
+| Residents | `GET /api/residents`, `POST`, `GET/PATCH/DELETE /api/residents/:id`, `GET /api/residents/hosts?apartmentId=` | admin (residents: own profile read; the `hosts` id+name list is also open to security) |
 | Staff | `GET /api/staff`, `POST`, `GET/PATCH/DELETE /api/staff/:id` | admin |
 | Payments | `GET /api/payments`, `POST`, `GET/PATCH /api/payments/:id`, `GET /api/payments/summary` | admin (residents: own flat read) |
 | Parking | `GET /api/parking`, `POST`, `GET/PATCH/DELETE /api/parking/:id` (PATCH actions: `allocate`, `release`, `update`) | admin (residents: own flat read) |
@@ -712,7 +718,7 @@ More design detail and the feature checklist: [docs/ARCHITECTURE.md](docs/ARCHIT
 ## 9. Known limitations
 
 - Academic demo: no payment gateway, no email/SMS, no chat, no biometric or hardware integration, no AI features.
-- Sessions are stateless JWT cookies lasting 8 hours. Logout clears the cookie but cannot revoke a stolen token. Deactivating an account does take effect immediately because the account is re-checked on every request.
+- Sessions are JWT cookies lasting 8 hours. Logout revokes every token issued to that account up to that moment (`UserAccount.sessions_valid_after`), which also signs the same account out on other devices. Deactivating an account takes effect immediately because the account is re-checked on every request.
 - Login throttling is in memory per server process.
 - Dropdowns load at most 200 options.
 - Writes that touch both databases are not atomic (see section 6).

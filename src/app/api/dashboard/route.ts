@@ -9,11 +9,17 @@ const startOfToday = () => {
   return d;
 };
 
+type Charts = {
+  payments?: { month: string; paid: number; pending: number }[];
+  complaints?: { status: string; count: number }[];
+};
+
 type Stat = { key: string; label: string; value: number | string; href?: string; error?: boolean };
 
 // Every number is computed from live data; role decides which numbers a viewer may see.
 export const GET = route("ANY", async ({ user }) => {
   const stats: Stat[] = [];
+  const charts: Charts = {};
 
   if (user.role === "ADMIN") {
     const [apartments, residents, pending, openComplaints, available] = await Promise.all([
@@ -23,6 +29,18 @@ export const GET = route("ANY", async ({ user }) => {
       prisma.complaint.count({ where: { status: { not: "RESOLVED" } } }),
       prisma.parkingSpace.count({ where: { status: "AVAILABLE" } }),
     ]);
+    const [byMonth, byStatus] = await Promise.all([
+      prisma.maintenancePayment.groupBy({ by: ["paymentMonth", "status"], _sum: { amount: true }, orderBy: { paymentMonth: "desc" }, take: 24 }),
+      prisma.complaint.groupBy({ by: ["status"], _count: { _all: true } }),
+    ]);
+    const months = new Map<string, { month: string; paid: number; pending: number }>();
+    for (const g of byMonth) {
+      const row = months.get(g.paymentMonth) ?? { month: g.paymentMonth, paid: 0, pending: 0 };
+      row[g.status === "PAID" ? "paid" : "pending"] += Number(g._sum.amount ?? 0);
+      months.set(g.paymentMonth, row);
+    }
+    charts.payments = [...months.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+    charts.complaints = byStatus.map((g) => ({ status: g.status, count: g._count._all }));
     stats.push(
       { key: "apartments", label: "Apartments", value: apartments, href: "/apartments" },
       { key: "residents", label: "Active residents", value: residents, href: "/residents" },
@@ -74,5 +92,5 @@ export const GET = route("ANY", async ({ user }) => {
     }
   }
 
-  return ok({ stats });
+  return ok({ stats, charts });
 });

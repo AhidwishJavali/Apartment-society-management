@@ -4,7 +4,7 @@ import type { Role } from "./rules";
 export const SESSION_COOKIE = "society_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
-export type SessionPayload = { sub: string; role: Role };
+export type SessionPayload = { sub: string; role: Role; issuedAtMs: number };
 
 // Edge-safe (used by middleware), so it reads process.env directly instead of getEnv().
 function secretKey(): Uint8Array {
@@ -14,7 +14,7 @@ function secretKey(): Uint8Array {
 }
 
 export async function signSession(userId: number, role: Role): Promise<string> {
-  return new SignJWT({ role })
+  return new SignJWT({ role, issuedAtMs: Date.now() })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(String(userId))
     .setIssuedAt()
@@ -27,7 +27,7 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
     if (!payload.sub || typeof payload.role !== "string") return null;
-    return { sub: payload.sub, role: payload.role as Role };
+    return { sub: payload.sub, role: payload.role as Role, issuedAtMs: typeof payload.issuedAtMs === "number" ? payload.issuedAtMs : 0 };
   } catch {
     return null;
   }
