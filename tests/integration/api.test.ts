@@ -235,6 +235,17 @@ d("API against live databases", () => {
     expect((await call(GET, "GET", `/api/residents/hosts?apartmentId=${apt}`)).status).toBe(403);
   });
 
+  it("throttles repeated failed sign-ins in the database (429) and clears on success", async () => {
+    const { POST } = await import("@/app/api/auth/login/route");
+    const who = `${tag.toLowerCase()}-nobody`;
+    for (let i = 0; i < 5; i++) {
+      expect((await call(POST, "POST", "/api/auth/login", { identifier: who, password: "wrong-password" })).status).toBe(401);
+    }
+    expect((await call(POST, "POST", "/api/auth/login", { identifier: who, password: "wrong-password" })).status).toBe(429);
+    expect((await prisma.loginAttempt.findUnique({ where: { identifier: who } }))?.failures).toBe(5);
+    await prisma.loginAttempt.deleteMany({ where: { identifier: who } });
+  });
+
   it("revokes the session on logout", async () => {
     const { GET } = await import("@/app/api/auth/session/route");
     const { POST: logout } = await import("@/app/api/auth/logout/route");

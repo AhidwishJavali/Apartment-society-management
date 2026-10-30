@@ -4,8 +4,7 @@ import { hashPassword, setSessionCookie, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loginBody } from "@/lib/schemas";
 
-// Small in-memory throttle (per server process) against password guessing.
-const attempts = new Map<string, { count: number; resetAt: number }>();
+// Failed attempts are counted in MySQL so the limit holds across processes and restarts.
 const MAX_FAILURES = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 
@@ -13,10 +12,10 @@ let dummyHash: Promise<string> | undefined;
 
 export const POST = publicRoute(async (req) => {
   const { identifier, password } = await parseBody(req, loginBody);
-  const key = identifier.toLowerCase();
+  const key = identifier.toLowerCase().slice(0, 100);
 
-  const entry = attempts.get(key);
-  if (entry && entry.resetAt > Date.now() && entry.count >= MAX_FAILURES) {
+  const entry = await prisma.loginAttempt.findUnique({ where: { identifier: key } });
+  if (entry && entry.resetAt.getTime() > Date.now() && entry.failures >= MAX_FAILURES) {
     throw new ApiError(429, "TOO_MANY_ATTEMPTS", "Too many failed sign-in attempts. Try again in a few minutes.");
   }
 
@@ -31,12 +30,16 @@ export const POST = publicRoute(async (req) => {
   const usable = account && account.isActive && (account.resident?.isActive ?? true) && (account.staff?.isActive ?? true);
 
   if (!account || !valid || !usable) {
-    const current = entry && entry.resetAt > Date.now() ? entry : { count: 0, resetAt: Date.now() + WINDOW_MS };
-    attempts.set(key, { count: current.count + 1, resetAt: current.resetAt });
+    const live = entry && entry.resetAt.getTime() > Date.now() ? entry : null;
+    await prisma.loginAttempt.upsert({
+      where: { identifier: key },
+      create: { identifier: key, failures: 1, resetAt: new Date(Date.now() + WINDOW_MS) },
+      update: live ? { failures: { increment: 1 } } : { failures: 1, resetAt: new Date(Date.now() + WINDOW_MS) },
+    });
     throw new ApiError(401, "INVALID_CREDENTIALS", "Invalid username/email or password");
   }
 
-  attempts.delete(key);
+  await prisma.loginAttempt.deleteMany({ where: { identifier: key } });
   await prisma.userAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });
   await setSessionCookie(account.id, account.role);
 
