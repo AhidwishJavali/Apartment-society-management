@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum ResidentType {
+  OWNER
+  TENANT
+}
+
+enum VehicleType {
+  CAR
+  BIKE
+}
+
+enum ParkingStatus {
+  ALLOCATED
+  AVAILABLE
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum UserRole {
+  ADMIN
+  RESIDENT
+  MAINTENANCE
+  SECURITY
+}
+
+model Apartment {
+  id        Int      @id @default(autoincrement()) @map("apartment_id")
+  block     String   @db.VarChar(10)
+  floorNo   Int      @map("floor_no")
+  flatNo    String   @map("flat_no") @db.VarChar(10)
+  bhk       Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  residents Resident[]
+  parking   ParkingSpace[]
+  payments  MaintenancePayment[]
+
+  @@unique([block, flatNo])
+  @@map("Apartment")
+}
+
+model Resident {
+  id           Int          @id @default(autoincrement()) @map("resident_id")
+  apartmentId  Int          @map("apartment_id")
+  name         String       @db.VarChar(100)
+  phone        String?      @unique @db.VarChar(15)
+  email        String?      @unique @db.VarChar(100)
+  residentType ResidentType @map("resident_type")
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  apartment  Apartment    @relation(fields: [apartmentId], references: [id])
+  vehicles   Vehicle[]
+  complaints Complaint[]
+  account    UserAccount?
+
+  @@index([apartmentId])
+  @@map("Resident")
+}
+
+model Staff {
+  id        Int      @id @default(autoincrement()) @map("staff_id")
+  name      String   @db.VarChar(100)
+  role      String   @db.VarChar(50)
+  phone     String?  @unique @db.VarChar(15)
+  salary    Decimal? @db.Decimal(10, 2)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  complaints Complaint[]
+  account    UserAccount?
+
+  @@index([role])
+  @@map("Staff")
+}
+
+// apartment_id is nullable: an AVAILABLE slot belongs to no flat.
+model ParkingSpace {
+  id          Int           @id @default(autoincrement()) @map("parking_id")
+  apartmentId Int?          @map("apartment_id")
+  slotNumber  String        @unique @map("slot_number") @db.VarChar(10)
+  vehicleType VehicleType   @map("vehicle_type")
+  status      ParkingStatus @default(AVAILABLE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  apartment Apartment? @relation(fields: [apartmentId], references: [id])
+  vehicle   Vehicle?
+
+  @@index([apartmentId])
+  @@index([status])
+  @@map("ParkingSpace")
+}
+
+model Vehicle {
+  id            Int         @id @default(autoincrement()) @map("vehicle_id")
+  residentId    Int         @map("resident_id")
+  parkingId     Int?        @unique @map("parking_id")
+  vehicleNumber String      @unique @map("vehicle_number") @db.VarChar(20)
+  vehicleType   VehicleType @map("vehicle_type")
+  brand         String?     @db.VarChar(50)
+  isActive      Boolean     @default(true) @map("is_active")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  resident Resident      @relation(fields: [residentId], references: [id])
+  parking  ParkingSpace? @relation(fields: [parkingId], references: [id])
+
+  @@index([residentId])
+  @@map("Vehicle")
+}
+
+model MaintenancePayment {
+  id           Int           @id @default(autoincrement()) @map("payment_id")
+  apartmentId  Int           @map("apartment_id")
+  amount       Decimal       @db.Decimal(10, 2)
+  paymentMonth String        @map("payment_month") @db.VarChar(20)
+  paymentDate  DateTime?     @map("payment_date") @db.Date
+  status       PaymentStatus
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  apartment Apartment @relation(fields: [apartmentId], references: [id])
+
+  @@unique([apartmentId, paymentMonth])
+  @@index([status])
+  @@map("MaintenancePayment")
+}
+
+model Complaint {
+  id            Int             @id @default(autoincrement()) @map("complaint_id")
+  residentId    Int             @map("resident_id")
+  staffId       Int?            @map("staff_id")
+  category      String          @db.VarChar(50)
+  description   String?         @db.VarChar(255)
+  complaintDate DateTime        @map("complaint_date") @db.Date
+  status        ComplaintStatus @default(OPEN)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  resident Resident @relation(fields: [residentId], references: [id])
+  staff    Staff?   @relation(fields: [staffId], references: [id])
+
+  @@index([residentId])
+  @@index([staffId])
+  @@index([status])
+  @@map("Complaint")
+}
+
+// Supporting table for real authentication. Admins are standalone; other roles
+// link to exactly one Resident (RESIDENT) or Staff (MAINTENANCE / SECURITY) row.
+model UserAccount {
+  id           Int       @id @default(autoincrement()) @map("user_id")
+  username     String    @unique @db.VarChar(50)
+  email        String    @unique @db.VarChar(100)
+  passwordHash String    @map("password_hash") @db.VarChar(100)
+  role         UserRole
+  residentId   Int?      @unique @map("resident_id")
+  staffId      Int?      @unique @map("staff_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  resident Resident? @relation(fields: [residentId], references: [id])
+  staff    Staff?    @relation(fields: [staffId], references: [id])
+
+  @@map("UserAccount")
+}
