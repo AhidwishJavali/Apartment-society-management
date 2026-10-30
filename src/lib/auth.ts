@@ -33,6 +33,15 @@ export async function clearSessionCookie(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
+/** Server-side logout: tokens issued up to now stop working even if someone kept a copy. */
+export async function revokeSessions(): Promise<void> {
+  const session = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  const userId = Number(session?.sub);
+  if (Number.isInteger(userId)) {
+    await prisma.userAccount.updateMany({ where: { id: userId }, data: { sessionsValidAfter: new Date() } });
+  }
+}
+
 /**
  * Resolves the signed-in user from the session cookie and re-reads the account from MySQL, so a
  * deactivated account or changed role takes effect immediately instead of when the token expires.
@@ -48,6 +57,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     include: { resident: true, staff: true },
   });
   if (!account || !account.isActive) return null;
+  if (account.sessionsValidAfter && session.issuedAtMs <= account.sessionsValidAfter.getTime()) return null;
   if (account.resident && !account.resident.isActive) return null;
   if (account.staff && !account.staff.isActive) return null;
 

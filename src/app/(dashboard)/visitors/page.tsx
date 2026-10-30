@@ -30,6 +30,7 @@ export default function VisitorsPage() {
     { name: "phone", label: "Phone", type: "tel" },
     { name: "purpose", label: "Purpose of visit", required: true },
     { name: "apartmentId", label: "Destination apartment", type: "select", required: true, options: apartments },
+    { name: "hostResidentId", label: "Host resident (optional)", type: "select", optionsFrom: { field: "apartmentId", param: "apartmentId", endpoint: "/api/residents/hosts" } },
     { name: "vehicleNumber", label: "Vehicle number (optional)" },
   ];
 

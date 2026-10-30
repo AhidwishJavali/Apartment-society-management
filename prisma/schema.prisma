@@ -170,17 +170,18 @@ model Complaint {
 // Supporting table for real authentication. Admins are standalone; other roles
 // link to exactly one Resident (RESIDENT) or Staff (MAINTENANCE / SECURITY) row.
 model UserAccount {
-  id           Int       @id @default(autoincrement()) @map("user_id")
-  username     String    @unique @db.VarChar(50)
-  email        String    @unique @db.VarChar(100)
-  passwordHash String    @map("password_hash") @db.VarChar(100)
-  role         UserRole
-  residentId   Int?      @unique @map("resident_id")
-  staffId      Int?      @unique @map("staff_id")
-  isActive     Boolean   @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                 Int       @id @default(autoincrement()) @map("user_id")
+  username           String    @unique @db.VarChar(50)
+  email              String    @unique @db.VarChar(100)
+  passwordHash       String    @map("password_hash") @db.VarChar(100)
+  role               UserRole
+  residentId         Int?      @unique @map("resident_id")
+  staffId            Int?      @unique @map("staff_id")
+  isActive           Boolean   @default(true) @map("is_active")
+  lastLoginAt        DateTime? @map("last_login_at")
+  sessionsValidAfter DateTime? @map("sessions_valid_after")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   resident Resident? @relation(fields: [residentId], references: [id])
   staff    Staff?    @relation(fields: [staffId], references: [id])

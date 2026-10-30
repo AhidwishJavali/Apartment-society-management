@@ -9,7 +9,7 @@ beforeAll(() => {
 describe("session tokens", () => {
   it("round-trips the user id and role", async () => {
     const token = await signSession(7, "SECURITY");
-    expect(await verifySession(token)).toEqual({ sub: "7", role: "SECURITY" });
+    expect(await verifySession(token)).toMatchObject({ sub: "7", role: "SECURITY" });
   });
 
   it("rejects missing, garbage and tampered tokens", async () => {
