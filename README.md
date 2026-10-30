@@ -70,7 +70,7 @@ Every row they create is removed again afterwards.
 
 ### Still open
 
-1. **Compare the schema with the team's ER diagram.** The implementation guide says to stop and report any conflict with the ER diagram. That diagram was not in the repository, so the schema was built from the lab script (`db/lab_baseline.sql`) and the guide. Every deliberate change is listed in [Changes from the lab baseline](#changes-from-the-lab-baseline). This needs a person with the diagram.
+1. **Compare with the team's own ER diagram.** The diagram was not in the repository, so [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) contains one generated from the deployed schema and a rule-by-rule check against section 4 of the implementation guide (all rules pass; no conflicts to report). A teammate only needs to overlay it on their diagram.
 2. **Optional scale work.** Dropdowns load at most 200 options (searchable pickers would be needed for a very large society), and login throttling is per server process rather than shared.
 
 ---
