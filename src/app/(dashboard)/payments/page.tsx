@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ResourcePage } from "@/components/ResourcePage";
 import { useOptions, useSession } from "@/components/session";
-import { Badge, Button, Modal, useToast } from "@/components/ui";
+import { Alert, Badge, Button, Modal, useToast } from "@/components/ui";
 import { ResourceForm, type FieldDef } from "@/components/ResourceForm";
 import { api, dateOnly, money } from "@/lib/client";
 import { formatBillingMonth } from "@/lib/rules";
@@ -59,11 +59,21 @@ export default function PaymentsPage() {
   ];
   const editFields = createFields.filter((f) => f.name !== "apartmentId" && f.name !== "paymentMonth");
 
+  // Someone who only rents has no bills (the server refuses too); say so instead of showing an error.
+  if (user.role === "RESIDENT" && !user.isOwner) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold text-slate-900">Maintenance payments</h1>
+        <Alert kind="warning">Maintenance bills are handled by the flat&apos;s owner, so there is nothing to show for a tenant.</Alert>
+      </div>
+    );
+  }
+
   return (
     <>
       <ResourcePage<Payment>
         title="Maintenance payments"
-        description={isAdmin ? "Monthly maintenance bills per flat." : "Your flat's payment history and pending balance."}
+        description={isAdmin ? "Monthly maintenance bills per flat." : user.ownedApartmentIds.length > 1 ? "Payment history and pending balance for the flats you own." : "Your flat's payment history and pending balance."}
         endpoint="/api/payments"
         refreshKey={refresh}
         searchPlaceholder="Search block or flat…"
