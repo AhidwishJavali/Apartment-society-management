@@ -1,9 +1,9 @@
 import type { FilterQuery } from "mongoose";
-import { badRequest, created, ok, parseBody, parseQuery, route } from "@/lib/api";
+import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { connectMongo } from "@/lib/mongodb";
 import { prisma } from "@/lib/prisma";
 import { feedbackBody, feedbackQuery } from "@/lib/schemas";
-import { pageArgs, pageMeta } from "@/server/helpers";
+import { pageArgs, pageMeta, pickResidency } from "@/server/helpers";
 import { withId } from "@/server/objectId";
 import { Feedback, type FeedbackDoc } from "@/models";
 
@@ -12,7 +12,7 @@ export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   await connectMongo();
 
   const filter: FilterQuery<FeedbackDoc> = {};
-  if (user.role === "RESIDENT") filter.residentId = user.residentId ?? -1;
+  if (user.role === "RESIDENT") filter.residentId = { $in: user.residentIds };
   if (q.status) filter.status = q.status;
   if (q.q) {
     const rx = { $regex: q.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
@@ -40,13 +40,13 @@ export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
 });
 
 export const POST = route(["RESIDENT"], async ({ req, user }) => {
-  const body = await parseBody(req, feedbackBody);
-  if (!user.residentId || !user.apartmentId) throw badRequest("Your account is not linked to a resident");
+  const { residentId: chosen, ...body } = await parseBody(req, feedbackBody);
+  const residency = pickResidency(user, chosen); // must be one of the user's own flats
   await connectMongo();
   const doc = await Feedback.create({
     ...body,
-    residentId: user.residentId, // from the session, never from the request
-    apartmentId: user.apartmentId,
+    residentId: residency.residentId,
+    apartmentId: residency.apartmentId,
     submittedAt: new Date(),
     status: "NEW",
   });

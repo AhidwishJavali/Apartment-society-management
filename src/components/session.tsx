@@ -9,10 +9,12 @@ export type SessionUser = {
   id: number;
   username: string;
   role: Role;
-  residentId: number | null;
   staffId: number | null;
-  apartmentId: number | null;
-  residentType: "OWNER" | "TENANT" | null;
+  residencies: { residentId: number; apartmentId: number; residentType: "OWNER" | "TENANT"; label: string }[];
+  apartmentIds: number[];
+  ownedApartmentIds: number[];
+  isOwner: boolean;
+  isTenant: boolean;
   displayName: string;
 };
 
@@ -60,4 +62,10 @@ export function useOptions(endpoint: string | null, toOption: (row: Record<strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
   return options;
+}
+
+/** "owner", "tenant" or "owner & tenant" for someone who owns one flat and rents another. */
+export function residentKind(user: SessionUser): string {
+  if (user.isOwner && user.isTenant) return "owner & tenant";
+  return user.isOwner ? "owner" : "tenant";
 }

@@ -47,6 +47,9 @@ describe("notice audiences", () => {
     expect(visibleAudiences("ADMIN")).toBe("ALL_AUDIENCES");
     expect(visibleAudiences("RESIDENT", "OWNER")).toEqual(["ALL", "OWNERS"]);
     expect(visibleAudiences("RESIDENT", "TENANT")).toEqual(["ALL", "TENANTS"]);
+    // Owns one flat, rents another: reads both.
+    expect(visibleAudiences("RESIDENT", ["OWNER", "TENANT"])).toEqual(["ALL", "OWNERS", "TENANTS"]);
+    expect(visibleAudiences("RESIDENT", [])).toEqual(["ALL"]);
     expect(visibleAudiences("MAINTENANCE")).toEqual(["ALL", "MAINTENANCE"]);
     expect(visibleAudiences("SECURITY")).toEqual(["ALL", "SECURITY"]);
   });

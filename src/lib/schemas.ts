@@ -11,6 +11,8 @@ const phone = z.string().trim().regex(/^[0-9+\-\s]{7,15}$/, "Enter a valid phone
 const email = z.string().trim().toLowerCase().email("Enter a valid email").max(100);
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const id = z.coerce.number().int().positive();
+/** A payment cannot be recorded as made after today (one day of slack for time zones). */
+const pastOrToday = dateOnly.refine((v) => new Date(`${v}T00:00:00.000Z`).getTime() <= Date.now() + 24 * 60 * 60 * 1000, "Payment date cannot be in the future");
 
 export const paginationQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -58,7 +60,7 @@ export const paymentBody = z
     amount: z.coerce.number().positive().max(99999999.99),
     paymentMonth: billingMonth,
     status: z.enum(["PAID", "PENDING"]),
-    paymentDate: optionalNullable(dateOnly),
+    paymentDate: optionalNullable(pastOrToday),
   })
   .superRefine((v, ctx) => {
     const problem = validatePaymentState(v);
@@ -68,7 +70,7 @@ export const paymentBody = z
 export const paymentPatch = z.object({
   amount: z.coerce.number().positive().max(99999999.99).optional(),
   status: z.enum(["PAID", "PENDING"]).optional(),
-  paymentDate: optionalNullable(dateOnly),
+  paymentDate: optionalNullable(pastOrToday),
 });
 
 export const paymentQuery = paginationQuery.extend({
@@ -192,6 +194,7 @@ export const noticeQuery = paginationQuery.extend({
 });
 
 export const feedbackBody = z.object({
+  residentId: optional(id), // which of the user's flats, when they have several
   category: text(50),
   rating: z.coerce.number().int().min(1).max(5),
   message: text(1000),
@@ -223,6 +226,8 @@ export const accountBody = z
 export const accountPatch = z.object({
   isActive: z.boolean().optional(),
   password: z.string().min(10, "At least 10 characters").max(100).optional(),
+  linkResidentId: optional(id),
+  unlinkResidentId: optional(id),
 });
 
 // ---- Account requests (public sign-up, admin approval) -------------------------------------

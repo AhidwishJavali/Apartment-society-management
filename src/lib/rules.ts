@@ -38,12 +38,21 @@ export function normalizeVehicleNumber(value: string): string {
 }
 
 /** Audiences a viewer in the given role may read. Admins see every audience. */
-export function visibleAudiences(role: Role, residentType?: "OWNER" | "TENANT" | null): NoticeAudience[] | "ALL_AUDIENCES" {
+export function visibleAudiences(
+  role: Role,
+  residentTypes?: "OWNER" | "TENANT" | null | ("OWNER" | "TENANT")[],
+): NoticeAudience[] | "ALL_AUDIENCES" {
   switch (role) {
     case "ADMIN":
       return "ALL_AUDIENCES";
-    case "RESIDENT":
-      return residentType === "TENANT" ? ["ALL", "TENANTS"] : ["ALL", "OWNERS"];
+    case "RESIDENT": {
+      // Someone who owns one flat and rents another reads both owner and tenant notices.
+      const types = Array.isArray(residentTypes) ? residentTypes : residentTypes ? [residentTypes] : [];
+      const out: NoticeAudience[] = ["ALL"];
+      if (types.includes("OWNER")) out.push("OWNERS");
+      if (types.includes("TENANT")) out.push("TENANTS");
+      return out;
+    }
     case "MAINTENANCE":
       return ["ALL", "MAINTENANCE"];
     case "SECURITY":

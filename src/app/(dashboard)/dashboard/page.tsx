@@ -80,8 +80,9 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-semibold">Welcome, {user.displayName}</h1>
         <p className="mt-1 text-sm text-slate-600">
-          {user.role === "RESIDENT" && user.residentType === "OWNER" && "Owner view: your flat's bills, household, parking and vehicles."}
-          {user.role === "RESIDENT" && user.residentType === "TENANT" && "Tenant view: your complaints, parking and vehicles. Maintenance bills are handled by the flat's owner."}
+          {user.role === "RESIDENT" && user.isOwner && user.isTenant && "Owner and tenant view: bills and household for the flats you own; complaints, parking and vehicles for all your flats."}
+          {user.role === "RESIDENT" && user.isOwner && !user.isTenant && `Owner view: bills, household, parking and vehicles for your ${user.ownedApartmentIds.length > 1 ? `${user.ownedApartmentIds.length} flats` : "flat"}.`}
+          {user.role === "RESIDENT" && !user.isOwner && "Tenant view: your complaints, parking and vehicles. Maintenance bills are handled by the flat's owner."}
           {user.role !== "RESIDENT" && "Live figures from the society databases."}
         </p>
       </div>

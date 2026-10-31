@@ -42,7 +42,7 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | Maintenance-payment tracking | Built (paid/pending, totals, mark paid, duplicate-bill guard) |
 | Parking and vehicle management | Built (allocate/release, type compatibility, no double allocation) |
 | Search / filter | Built (search box, filters and pagination on every list) |
-| Test database operations and relationships | Built: 21 unit tests plus 13 integration tests that run against live MySQL and MongoDB |
+| Test database operations and relationships | Built: 21 unit tests plus 18 integration tests that run against live MySQL and MongoDB |
 | Integrate all modules into the final system | Built and run end to end (migration, seed, login, every list endpoint and page) |
 
 ### Verification
@@ -52,9 +52,9 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | `npm run lint` | passes |
 | `npm run typecheck` | passes |
 | `npm run build` | passes |
-| `npm test` | 21 unit tests pass (13 integration tests are skipped unless a database is available) |
+| `npm test` | 21 unit tests pass (18 integration tests are skipped unless a database is available) |
 | `npm run db:setup` | migrations, Mongo indexes and seed run cleanly on live MySQL and MongoDB |
-| `npm run test:integration` | 13 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation, DB-backed login throttle, account request approval flow, owner vs tenant access |
+| `npm run test:integration` | 18 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation, DB-backed login throttle, account request approval flow, owner vs tenant access, one person with several flats, move-out cleanup, staff deactivation, future payment dates, password reset sign-out |
 | Smoke test of `next start` | login works, bad password gives 401, all list endpoints and pages return 200 |
 | CI | `.github/workflows/ci.yml` runs lint, typecheck, tests, build, `db:setup` and the integration tests against MySQL and MongoDB service containers |
 
@@ -161,7 +161,7 @@ npm run db:reset
 | Username | Role | Linked record | Lands on |
 | --- | --- | --- | --- |
 | `admin` | Administrator | standalone | Dashboard |
-| `resident` | Resident (owner) | Arjun Rao, flat A-101 | Dashboard |
+| `resident` | Resident (owner of **two** flats) | Arjun Rao: lives in and owns A-101, also owns A-201 which he rents to Rahul | Dashboard |
 | `tenant` | Resident (tenant) | Rahul Mehta, flat B-101 | Dashboard |
 | `maintenance` | Maintenance staff | Suresh Kumar (Electrician) | Complaints |
 | `security` | Security | Mahesh Rao (Security Guard) | Visitors |
@@ -171,10 +171,12 @@ Passwords come from the seed output / `.demo-credentials.local`. Admins can crea
 | Role | What they can do |
 | --- | --- |
 | Administrator | Everything: apartments, residents, staff, payments, parking, vehicles, complaints (assign, change status), visitors, notices, feedback review, accounts |
-| Resident, **owner** | Own flat; **the flat's maintenance bills and pending balance**; **everyone registered in the flat (household), including tenants**; the flat's parking and vehicles; create and track own complaints; read notices for owners; submit feedback |
-| Resident, **tenant** | Own flat; **own profile only**; parking and vehicles; create and track own complaints; read notices for tenants; submit feedback. **No access to maintenance bills** (billing belongs to the owner) and a different dashboard and menu |
+| Resident, **owner** | Every flat they own: **maintenance bills and pending balance**, **everyone registered there (household), including tenants**, parking and vehicles; create and track own complaints; read notices for owners; submit feedback |
+| Resident, **tenant** | Flats they rent; **own profile only**; parking and vehicles; create and track own complaints; read notices for tenants; submit feedback. **No access to maintenance bills** (billing belongs to the owner) and a different dashboard and menu |
 | Maintenance | See complaints assigned to them; mark In progress work Resolved; add work notes; read notices |
 | Security | Register visitor entry and exit; search visitor history; read notices. **No payment access** |
+
+A person can have **several flats on one login** (own two flats, or own one and rent another). Access is worked out per flat: bills and household only for flats they own, their own rows and vehicles everywhere, notices for every audience that applies. When such a person files a complaint or feedback the form asks **which flat** it is about. Admins add a flat to an existing login with **Accounts → Link another flat**.
 
 The owner and tenant views differ in the menu ("My household" vs "My profile", Payments only for owners), the dashboard figures, and, enforced on the server, the payment and resident endpoints (a tenant gets 403 on `/api/payments`).
 
@@ -206,13 +208,13 @@ UserAccount ── standalone      (role ADMIN)
 | Table | Purpose |
 | --- | --- |
 | `Apartment` | One row per flat; parent of Resident, ParkingSpace, MaintenancePayment |
-| `Resident` | Resident profile, OWNER or TENANT, belongs to one apartment |
+| `Resident` | A residency: one person in one flat, OWNER or TENANT. A person with several flats has one row per flat, all linked to the same login through `account_id` |
 | `Staff` | Staff profile, role, contact, salary |
 | `ParkingSpace` | A parking slot; optionally allocated to an apartment |
 | `Vehicle` | Belongs to a resident; may hold one parking slot |
 | `MaintenancePayment` | One monthly bill per apartment; PAID or PENDING |
 | `Complaint` | Raised by a resident; optionally assigned to staff; OPEN / IN_PROGRESS / RESOLVED |
-| `UserAccount` | Sign-in account (new): links to a resident or staff row; admins are standalone |
+| `UserAccount` | Sign-in account (new): resident logins are linked from one or more `Resident` rows; staff logins link to one `Staff` row; admins are standalone |
 
 ### Changes from the lab baseline
 
@@ -229,12 +231,13 @@ The original lab script is kept in [db/lab_baseline.sql](db/lab_baseline.sql). T
 | `ParkingSpace.apartment_id` nullable | A free slot belongs to no flat |
 | Unique `Vehicle.parking_id` | The database itself prevents two vehicles on one slot |
 | Indexes on foreign keys and filtered columns | Query performance |
-| `Resident`/`Staff` phone and email stay unique but nullable | Optional contact details |
+| `Staff` phone stays unique but nullable; `Resident` phone and email are indexed but **not unique** | The same person appears once per flat they own or rent |
+| `Resident.account_id` (nullable, unique together with `apartment_id`) instead of `UserAccount.resident_id` | One login for several flats, at most one row per flat per login |
 | Seed data: unassigned complaints are OPEN; two extra free slots; five extra September bills | Baseline had OPEN complaints already assigned to staff, which the lifecycle forbids |
 
 ### The actual DDL
 
-This is the exact SQL applied by `npm run db:migrate` (file: [prisma/migrations/20261030000000_init/migration.sql](prisma/migrations/20261030000000_init/migration.sql)). Money uses `DECIMAL`, never `FLOAT`.
+This is the initial SQL applied by `npm run db:migrate` (file: [prisma/migrations/20261030000000_init/migration.sql](prisma/migrations/20261030000000_init/migration.sql)). Later migrations add to it; they are listed with their purpose in [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md#migrations-added). Money uses `DECIMAL`, never `FLOAT`.
 
 ```sql
 CREATE TABLE `Apartment` (
@@ -683,11 +686,11 @@ Status codes: 200/201 success, 207 partial success, 400 validation, 401 not sign
 | Payments | `GET /api/payments`, `POST`, `GET/PATCH /api/payments/:id`, `GET /api/payments/summary` | admin (residents: own flat read) |
 | Parking | `GET /api/parking`, `POST`, `GET/PATCH/DELETE /api/parking/:id` (PATCH actions: `allocate`, `release`, `update`) | admin (residents: own flat read) |
 | Vehicles | `GET /api/vehicles`, `POST`, `GET/PATCH/DELETE /api/vehicles/:id` (DELETE deactivates) | admin (residents: own flat read) |
-| Complaints | `GET /api/complaints`, `POST`, `GET/PATCH /api/complaints/:id` (PATCH actions: `assign`, `status`), `POST /api/complaints/:id/activity` | scoped by role and ownership |
+| Complaints | `GET /api/complaints`, `POST` (residents with several flats pass `residentId` to say which flat), `GET/PATCH /api/complaints/:id` (PATCH actions: `assign`, `status`), `POST /api/complaints/:id/activity` | scoped by role and ownership |
 | Visitors | `GET /api/visitors`, `POST`, `PATCH /api/visitors/:id` (`{ "action": "exit" }`) | security, admin |
 | Notices | `GET /api/notices`, `POST`, `PATCH /api/notices/:id` (actions `publish`, `archive`) | admin write; everyone reads what is meant for them |
-| Feedback | `GET /api/feedback`, `POST`, `PATCH /api/feedback/:id` | residents submit and see their own; admin reviews |
-| Accounts | `GET /api/accounts`, `POST`, `PATCH /api/accounts/:id` | admin |
+| Feedback | `GET /api/feedback`, `POST` (same `residentId` rule), `PATCH /api/feedback/:id` | residents submit and see their own; admin reviews |
+| Accounts | `GET /api/accounts`, `POST`, `PATCH /api/accounts/:id` (`isActive`, `password`, `linkResidentId`, `unlinkResidentId`) | admin |
 | Dashboard | `GET /api/dashboard` | any signed-in role (numbers differ by role) |
 
 ---
@@ -727,8 +730,34 @@ More design detail and the feature checklist: [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ---
 
+## Edge cases handled
+
+Every row below has a test in `tests/integration/api.test.ts` or `tests/rules.test.ts`.
+
+| Situation | What happens |
+| --- | --- |
+| One person owns two flats, or owns one and rents another | One login, one `Resident` row per flat. Bills and household only for owned flats; complaints, feedback, parking, vehicles and notices cover all their flats |
+| Same person, same phone/email in two flats | Allowed (contact details are not unique on `Resident`) |
+| Linking a login to a second row in a flat it already has | Rejected (409); enforced by a unique index too |
+| Linking a resident row that already belongs to another login | Rejected (409) |
+| Multi-flat person files a complaint or feedback without saying which flat | Rejected (400, "choose which flat"); naming a flat that is not theirs gives 403 |
+| Owner of flat A asks for the bills of flat B they only rent | Nothing returned; the single-bill endpoint gives 403 |
+| Tenant opens their flat's detail page | Flat only: no payment summary, no neighbour list |
+| Resident moves out (deactivated) | Their parking slots are released and vehicles retired in the same transaction; the login is locked only if that was their last active flat |
+| Resident moved to another flat while their vehicles are parked | Rejected (409) until the slots are released |
+| Inactive resident's vehicle reactivated | Rejected (400) |
+| Unlinking a login's last active flat | Rejected (400): deactivate the account instead |
+| Staff member deactivated with work in progress | Their IN_PROGRESS complaints go back to OPEN and unassigned, with a timeline entry |
+| Payment recorded with a future payment date | Rejected (400) |
+| Admin resets a password | All existing sessions for that login stop working |
+| Vehicle brand cleared | Saved as empty (previously ignored) |
+| Someone with an existing login asks for an account again from the public form | Refused with a message to ask the admin to link the extra flat |
+| Two admins approve the same request, or two allocations race for one slot | Exactly one succeeds |
+
 ## 9. Known limitations
 
+- One role per login: a staff member who also lives in the society needs two logins (one staff, one resident).
+- Reactivating a resident does not reactivate a login that was locked when they moved out; an admin re-enables it on the Accounts page.
 - Academic demo: no payment gateway, no email/SMS, no chat, no biometric or hardware integration, no AI features.
 - Sessions are JWT cookies lasting 8 hours. Logout revokes every token issued to that account up to that moment (`UserAccount.sessions_valid_after`), which also signs the same account out on other devices. Deactivating an account takes effect immediately because the account is re-checked on every request.
 - Login throttling is stored in MySQL (`LoginAttempt`): 5 failures per identifier per 15 minutes, shared by every server process.

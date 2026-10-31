@@ -2,13 +2,15 @@ import type { Prisma } from "@prisma/client";
 import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { paymentBody, paymentQuery } from "@/lib/schemas";
-import { assertBillingAccess, pageArgs, pageMeta, toDateOnly } from "@/server/helpers";
+import { assertBillingAccess, billableApartments, pageArgs, pageMeta, toDateOnly } from "@/server/helpers";
 
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   assertBillingAccess(user);
   const q = parseQuery(req, paymentQuery);
   const where: Prisma.MaintenancePaymentWhereInput = {};
-  if (user.role === "RESIDENT") where.apartmentId = user.apartmentId ?? -1;
+  const owned = billableApartments(user);
+  // An owner may narrow to one of their flats, never widen beyond them.
+  if (owned) where.apartmentId = q.apartmentId ? (owned.includes(q.apartmentId) ? q.apartmentId : -1) : { in: owned };
   else if (q.apartmentId) where.apartmentId = q.apartmentId;
   if (q.status) where.status = q.status;
   if (q.month) where.paymentMonth = q.month;

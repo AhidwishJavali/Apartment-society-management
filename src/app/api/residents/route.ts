@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { paginationQuery, residentBody } from "@/lib/schemas";
-import { pageArgs, pageMeta } from "@/server/helpers";
+import { pageArgs, pageMeta, visibleResidentsWhere } from "@/server/helpers";
 import { z } from "zod";
 
 const query = paginationQuery.extend({
@@ -14,11 +14,8 @@ const query = paginationQuery.extend({
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   const q = parseQuery(req, query);
   const where: Prisma.ResidentWhereInput = {};
-  if (user.role === "RESIDENT") {
-    // Owners see everyone in their flat; tenants see only themselves.
-    if (user.residentType === "OWNER") where.apartmentId = user.apartmentId ?? -1;
-    else where.id = user.residentId ?? -1;
-  }
+  // Residents see their own rows, plus everyone in flats they own (the household).
+  if (user.role === "RESIDENT") where.AND = [visibleResidentsWhere(user)];
   if (q.apartmentId && user.role === "ADMIN") where.apartmentId = q.apartmentId;
   if (q.residentType) where.residentType = q.residentType;
   if (q.active) where.isActive = q.active === "true";
@@ -29,7 +26,10 @@ export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
       where,
       orderBy: { name: "asc" },
       ...pageArgs(q),
-      include: { apartment: { select: { block: true, flatNo: true } } },
+      include: {
+        apartment: { select: { block: true, flatNo: true } },
+        account: user.role === "ADMIN" ? { select: { id: true, username: true } } : false,
+      },
     }),
     prisma.resident.count({ where }),
   ]);

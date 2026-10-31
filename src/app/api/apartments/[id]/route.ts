@@ -8,14 +8,16 @@ type P = { id: string };
 export const GET = route<P>(["ADMIN", "RESIDENT"], async ({ user, params }) => {
   const id = parseId(params.id);
   assertApartmentAccess(user, id);
+  // Bills and the household list belong to admins and the flat's owners; tenants get the flat only.
+  const ownerView = user.role === "ADMIN" || user.ownedApartmentIds.includes(id);
   const apartment = await prisma.apartment.findUnique({
     where: { id },
     include: {
-      // Neighbours' details are admin-only; residents get the flat and payment summary.
-      residents: user.role === "ADMIN" ? { select: { id: true, name: true, residentType: true, isActive: true } } : false,
+      residents: ownerView ? { select: { id: true, name: true, residentType: true, isActive: true } } : false,
     },
   });
   if (!apartment) throw notFound("Apartment");
+  if (!ownerView) return ok(apartment);
 
   const totals = await prisma.maintenancePayment.groupBy({
     by: ["status"],

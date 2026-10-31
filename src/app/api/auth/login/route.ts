@@ -21,13 +21,14 @@ export const POST = publicRoute(async (req) => {
 
   const account = await prisma.userAccount.findFirst({
     where: { OR: [{ username: identifier }, { email: key }] },
-    include: { resident: true, staff: true },
+    include: { residencies: { where: { isActive: true }, select: { id: true } }, staff: true },
   });
 
   // Always run one bcrypt comparison so timing does not reveal whether the account exists.
   dummyHash ??= hashPassword("not-a-real-password");
   const valid = await verifyPassword(password, account?.passwordHash ?? (await dummyHash));
-  const usable = account && account.isActive && (account.resident?.isActive ?? true) && (account.staff?.isActive ?? true);
+  const usable =
+    account && account.isActive && (account.role !== "RESIDENT" || account.residencies.length > 0) && (account.staff?.isActive ?? true);
 
   if (!account || !valid || !usable) {
     const live = entry && entry.resetAt.getTime() > Date.now() ? entry : null;

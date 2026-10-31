@@ -103,10 +103,13 @@ export default function ComplaintsPage() {
   const reload = () => setRefresh((n) => n + 1);
 
   const staff = useOptions(isAdmin ? "/api/staff?active=true" : null, (s) => ({ value: s.id as number, label: `${s.name} – ${s.role}` }));
-  const residents = useOptions(isAdmin ? "/api/residents?active=true" : null, (r) => ({ value: r.id as number, label: String(r.name) }));
+  const residents = useOptions(isAdmin ? "/api/residents?active=true" : null, (r) => ({ value: r.id as number, label: `${r.name} (${(r.apartment as { block: string; flatNo: string }).block}-${(r.apartment as { block: string; flatNo: string }).flatNo})` }));
+  // Someone with several flats says which flat the problem is in.
+  const myFlats = user.residencies.map((r) => ({ value: r.residentId, label: `${r.label} (${r.residentType.toLowerCase()})` }));
 
   const createFields: FieldDef[] = [
     ...(isAdmin ? [{ name: "residentId", label: "On behalf of resident", type: "select" as const, required: true, options: residents }] : []),
+    ...(user.role === "RESIDENT" && myFlats.length > 1 ? [{ name: "residentId", label: "Which flat?", type: "select" as const, required: true, options: myFlats }] : []),
     { name: "category", label: "Category", type: "select", required: true, options: CATEGORIES },
     { name: "description", label: "Describe the problem", type: "textarea", required: true },
   ];
