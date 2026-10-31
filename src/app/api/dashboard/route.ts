@@ -2,6 +2,7 @@ import { ok, route } from "@/lib/api";
 import { connectMongo } from "@/lib/mongodb";
 import { prisma } from "@/lib/prisma";
 import { Visitor } from "@/models";
+import { visibleResidentsWhere } from "@/server/helpers";
 
 const startOfToday = () => {
   const d = new Date();
@@ -54,34 +55,31 @@ export const GET = route("ANY", async ({ user }) => {
   }
 
   if (user.role === "RESIDENT") {
-    const apartmentId = user.apartmentId ?? -1;
-    const residentId = user.residentId ?? -1;
+    const owned = user.ownedApartmentIds;
+    const flats = user.apartmentIds.length;
     const [myOpen, parking, vehicles] = await Promise.all([
-      prisma.complaint.count({ where: { residentId, status: { not: "RESOLVED" } } }),
-      prisma.parkingSpace.count({ where: { apartmentId } }),
-      prisma.vehicle.count({ where: { isActive: true, resident: user.residentType === "OWNER" ? { apartmentId } : { id: residentId } } }),
+      prisma.complaint.count({ where: { residentId: { in: user.residentIds }, status: { not: "RESOLVED" } } }),
+      prisma.parkingSpace.count({ where: { apartmentId: { in: user.apartmentIds } } }),
+      prisma.vehicle.count({ where: { isActive: true, resident: visibleResidentsWhere(user) } }),
     ]);
-    if (user.residentType === "OWNER") {
-      // Owners are billed for the flat and see who lives in it.
+    if (flats > 1) stats.push({ key: "flats", label: "My flats", value: user.residencies.map((r) => `${r.label} (${r.residentType.toLowerCase()})`).join(", ") });
+    if (owned.length > 0) {
+      // Owners are billed for the flats they own and see who lives in them.
       const [pending, household] = await Promise.all([
-        prisma.maintenancePayment.aggregate({ where: { apartmentId, status: "PENDING" }, _count: { _all: true }, _sum: { amount: true } }),
-        prisma.resident.count({ where: { apartmentId, isActive: true } }),
+        prisma.maintenancePayment.aggregate({ where: { apartmentId: { in: owned }, status: "PENDING" }, _count: { _all: true }, _sum: { amount: true } }),
+        prisma.resident.count({ where: { apartmentId: { in: owned }, isActive: true } }),
       ]);
       stats.push(
         { key: "pending", label: "Pending bills", value: pending._count._all, href: "/payments" },
         { key: "pendingAmount", label: "Pending balance (₹)", value: Number(pending._sum.amount ?? 0) },
-        { key: "household", label: "People in my flat", value: household, href: "/residents" },
-        { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
-        { key: "parking", label: "Flat parking slots", value: parking, href: "/parking" },
-        { key: "vehicles", label: "Flat vehicles", value: vehicles, href: "/vehicles" },
-      );
-    } else {
-      stats.push(
-        { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
-        { key: "parking", label: "Parking slot for my flat", value: parking, href: "/parking" },
-        { key: "vehicles", label: "My vehicles", value: vehicles, href: "/vehicles" },
+        { key: "household", label: owned.length > 1 ? "People in my flats" : "People in my flat", value: household, href: "/residents" },
       );
     }
+    stats.push(
+      { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
+      { key: "parking", label: flats > 1 ? "Parking slots for my flats" : "Parking slots for my flat", value: parking, href: "/parking" },
+      { key: "vehicles", label: owned.length > 0 ? "Vehicles" : "My vehicles", value: vehicles, href: "/vehicles" },
+    );
   }
 
   if (user.role === "MAINTENANCE") {

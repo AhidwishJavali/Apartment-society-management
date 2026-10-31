@@ -14,7 +14,7 @@ type Account = {
   role: string;
   isActive: boolean;
   lastLoginAt: string | null;
-  resident: { name: string } | null;
+  residencies: { id: number; name: string; residentType: string; isActive: boolean; apartment: { block: string; flatNo: string } }[];
   staff: { name: string } | null;
 };
 
@@ -23,7 +23,8 @@ export default function AccountsPage() {
   const notify = useToast();
   const [refresh, setRefresh] = useState(0);
   const [resetting, setResetting] = useState<Account | null>(null);
-  const residents = useOptions("/api/residents?active=true", (r) => ({ value: r.id as number, label: String(r.name) }));
+  const residents = useOptions("/api/residents?active=true", (r) => ({ value: r.id as number, label: `${r.name} (${(r.apartment as { block: string; flatNo: string }).block}-${(r.apartment as { block: string; flatNo: string }).flatNo}, ${String(r.residentType).toLowerCase()})` }));
+  const [linking, setLinking] = useState<Account | null>(null);
   const staff = useOptions("/api/staff?active=true", (s) => ({ value: s.id as number, label: `${s.name} – ${s.role}` }));
 
   const fields: FieldDef[] = [
@@ -60,7 +61,13 @@ export default function AccountsPage() {
           { header: "Username", cell: (a) => a.username },
           { header: "Email", cell: (a) => a.email },
           { header: "Role", cell: (a) => a.role.toLowerCase() },
-          { header: "Linked to", cell: (a) => a.resident?.name ?? a.staff?.name ?? "—" },
+          {
+            header: "Linked to",
+            cell: (a) =>
+              a.residencies.length
+                ? a.residencies.map((r) => `${r.name}, ${r.apartment.block}-${r.apartment.flatNo} (${r.residentType.toLowerCase()}${r.isActive ? "" : ", inactive"})`).join("; ")
+                : a.staff?.name ?? "—",
+          },
           { header: "Last sign-in", cell: (a) => dateTime(a.lastLoginAt) },
           { header: "Status", cell: (a) => <Badge value={a.isActive ? "AVAILABLE" : "INACTIVE"} /> },
         ]}
@@ -71,6 +78,11 @@ export default function AccountsPage() {
             <Button size="sm" variant="secondary" onClick={() => setResetting(a)}>
               Reset password
             </Button>
+            {a.role === "RESIDENT" && (
+              <Button size="sm" variant="secondary" onClick={() => setLinking(a)}>
+                Link another flat
+              </Button>
+            )}
             {a.id !== me.id && (
               <Button size="sm" variant="secondary" onClick={() => toggle(a)}>
                 {a.isActive ? "Deactivate" : "Activate"}
@@ -79,6 +91,24 @@ export default function AccountsPage() {
           </>
         )}
       />
+      {linking && (
+        <Modal title={`Link another flat – ${linking.username}`} onClose={() => setLinking(null)}>
+          <p className="mb-3 text-sm text-slate-600">
+            For a person who owns or rents more than one flat. Pick their resident row in the other flat (add it on the Residents page first if needed).
+          </p>
+          <ResourceForm
+            fields={[{ name: "linkResidentId", label: "Resident row in the other flat", type: "select", required: true, options: residents }]}
+            submitLabel="Link flat"
+            onCancel={() => setLinking(null)}
+            onSubmit={async (v) => {
+              await api(`/api/accounts/${linking.id}`, { method: "PATCH", json: { linkResidentId: Number(v.linkResidentId) } });
+              notify("Flat linked");
+              setLinking(null);
+              setRefresh((n) => n + 1);
+            }}
+          />
+        </Modal>
+      )}
       {resetting && (
         <Modal title={`Reset password – ${resetting.username}`} onClose={() => setResetting(null)}>
           <ResourceForm

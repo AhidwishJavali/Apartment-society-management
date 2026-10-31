@@ -4,14 +4,22 @@ import { prisma } from "./prisma";
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession, verifySession } from "./session-token";
 import type { Role } from "./rules";
 
+export type Residency = { residentId: number; apartmentId: number; residentType: "OWNER" | "TENANT"; label: string };
+
 export type CurrentUser = {
   id: number;
   username: string;
   role: Role;
-  residentId: number | null;
   staffId: number | null;
-  apartmentId: number | null;
-  residentType: "OWNER" | "TENANT" | null;
+  /** Active residencies (one per flat). A person may own some flats and rent others. */
+  residencies: Residency[];
+  residentIds: number[];
+  /** Every flat the user lives in or owns. */
+  apartmentIds: number[];
+  /** Flats where the user is an OWNER: billing and household access. */
+  ownedApartmentIds: number[];
+  isOwner: boolean;
+  isTenant: boolean;
   displayName: string;
 };
 
@@ -54,21 +62,38 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const account = await prisma.userAccount.findUnique({
     where: { id: userId },
-    include: { resident: true, staff: true },
+    include: {
+      staff: true,
+      residencies: {
+        where: { isActive: true },
+        orderBy: { id: "asc" },
+        include: { apartment: { select: { block: true, flatNo: true } } },
+      },
+    },
   });
   if (!account || !account.isActive) return null;
   if (account.sessionsValidAfter && session.issuedAtMs <= account.sessionsValidAfter.getTime()) return null;
-  if (account.resident && !account.resident.isActive) return null;
+  // A resident who no longer lives in or owns any flat cannot use the app.
+  if (account.role === "RESIDENT" && account.residencies.length === 0) return null;
   if (account.staff && !account.staff.isActive) return null;
 
+  const residencies: Residency[] = account.residencies.map((r) => ({
+    residentId: r.id,
+    apartmentId: r.apartmentId,
+    residentType: r.residentType,
+    label: `${r.apartment.block}-${r.apartment.flatNo}`,
+  }));
   return {
     id: account.id,
     username: account.username,
     role: account.role,
-    residentId: account.residentId,
     staffId: account.staffId,
-    apartmentId: account.resident?.apartmentId ?? null,
-    residentType: account.resident?.residentType ?? null,
-    displayName: account.resident?.name ?? account.staff?.name ?? account.username,
+    residencies,
+    residentIds: residencies.map((r) => r.residentId),
+    apartmentIds: [...new Set(residencies.map((r) => r.apartmentId))],
+    ownedApartmentIds: [...new Set(residencies.filter((r) => r.residentType === "OWNER").map((r) => r.apartmentId))],
+    isOwner: residencies.some((r) => r.residentType === "OWNER"),
+    isTenant: residencies.some((r) => r.residentType === "TENANT"),
+    displayName: account.residencies[0]?.name ?? account.staff?.name ?? account.username,
   };
 }

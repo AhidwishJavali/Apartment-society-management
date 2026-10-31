@@ -2,7 +2,7 @@ import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { accountBody, paginationQuery } from "@/lib/schemas";
-import { assertLinkable } from "@/server/accounts";
+import { assertLinkable, linkResidency } from "@/server/accounts";
 import { pageArgs, pageMeta } from "@/server/helpers";
 
 const select = {
@@ -12,7 +12,7 @@ const select = {
   role: true,
   isActive: true,
   lastLoginAt: true,
-  resident: { select: { id: true, name: true } },
+  residencies: { select: { id: true, name: true, residentType: true, isActive: true, apartment: { select: { block: true, flatNo: true } } } },
   staff: { select: { id: true, name: true } },
 } as const; // passwordHash is never selected
 
@@ -29,18 +29,19 @@ export const GET = route(["ADMIN"], async ({ req }) => {
 export const POST = route(["ADMIN"], async ({ req }) => {
   const body = await parseBody(req, accountBody);
 
-  await assertLinkable(prisma, body.role, body.residentId, body.staffId);
-
-  const account = await prisma.userAccount.create({
-    data: {
-      username: body.username,
-      email: body.email,
-      passwordHash: await hashPassword(body.password),
-      role: body.role,
-      residentId: body.residentId ?? null,
-      staffId: body.staffId ?? null,
-    },
-    select,
+  const account = await prisma.$transaction(async (tx) => {
+    await assertLinkable(tx, body.role, body.residentId, body.staffId);
+    const made = await tx.userAccount.create({
+      data: {
+        username: body.username,
+        email: body.email,
+        passwordHash: await hashPassword(body.password),
+        role: body.role,
+        staffId: body.staffId ?? null,
+      },
+    });
+    if (body.residentId) await linkResidency(tx, made.id, body.residentId);
+    return tx.userAccount.findUniqueOrThrow({ where: { id: made.id }, select });
   });
   return created(account);
 });

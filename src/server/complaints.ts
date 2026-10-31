@@ -10,7 +10,7 @@ export async function loadComplaintFor(user: CurrentUser, id: number) {
   const complaint = await prisma.complaint.findUnique({ where: { id }, include: complaintInclude });
   if (!complaint) throw notFound("Complaint");
   if (user.role === "ADMIN") return complaint;
-  if (user.role === "RESIDENT" && complaint.residentId === user.residentId) return complaint;
+  if (user.role === "RESIDENT" && user.residentIds.includes(complaint.residentId)) return complaint;
   if (user.role === "MAINTENANCE" && complaint.staffId !== null && complaint.staffId === user.staffId) return complaint;
   throw forbidden();
 }

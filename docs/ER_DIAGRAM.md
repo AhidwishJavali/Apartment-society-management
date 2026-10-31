@@ -13,7 +13,7 @@ erDiagram
     Resident ||--o{ Complaint : "raises"
     Staff |o--o{ Complaint : "is assigned"
     ParkingSpace |o--o| Vehicle : "holds at most one"
-    Resident |o--o| UserAccount : "signs in as"
+    UserAccount |o--o{ Resident : "one login, many flats"
     Staff |o--o| UserAccount : "signs in as"
     UserAccount |o--o| AccountRequest : "created from"
 
@@ -27,9 +27,10 @@ erDiagram
     Resident {
         int resident_id PK
         int apartment_id FK
+        int account_id FK "nullable; unique with apartment_id"
         varchar name
-        varchar phone UK
-        varchar email UK
+        varchar phone "indexed, not unique"
+        varchar email "indexed, not unique"
         enum resident_type "OWNER, TENANT"
         bool is_active
     }
@@ -96,7 +97,6 @@ erDiagram
         varchar email UK
         varchar password_hash
         enum role
-        int resident_id FK "nullable, unique"
         int staff_id FK "nullable, unique"
         bool is_active
         datetime sessions_valid_after "nullable"
@@ -112,7 +112,7 @@ Checked by introspecting the live MySQL database (`information_schema`) after `n
 | Guide rule | Result |
 | --- | --- |
 | Seven agreed core tables kept with their names and meanings | Pass: Apartment, Resident, Staff, ParkingSpace, Vehicle, MaintenancePayment, Complaint |
-| `UserAccount` supporting table included, password hashes only | Pass: `password_hash` only; links to Resident or Staff, admins standalone |
+| `UserAccount` supporting table included, password hashes only | Pass: `password_hash` only; resident logins linked from one or more `Resident` rows, staff logins to one `Staff` row, admins standalone |
 | Apartment 1-to-many Resident, ParkingSpace, MaintenancePayment | Pass: three foreign keys to `Apartment` |
 | Resident 1-to-many Vehicle and Complaint | Pass |
 | Staff 1-to-many Complaint, complaint may be unassigned | Pass: `Complaint.staff_id` nullable, `ON DELETE SET NULL` |
@@ -131,5 +131,6 @@ Checked by introspecting the live MySQL database (`information_schema`) after `n
 | `20261030010000_session_revocation` | Adds nullable `UserAccount.sessions_valid_after` so logout can revoke issued tokens |
 | `20261030020000_login_throttle` | Adds standalone `LoginAttempt` table (no foreign keys) for the shared sign-in throttle |
 | `20261031000000_account_requests` | Adds `AccountRequest` (sign-up requests awaiting admin approval) with a nullable unique foreign key to the account it produced |
+| `20261031010000_multi_flat_residents` | Moves the login link to `Resident.account_id` so one person can have several flats; copies existing links before dropping `UserAccount.resident_id`; resident phone/email no longer unique |
 
 No conflicts with the guide were found, so there is nothing to stop and report.

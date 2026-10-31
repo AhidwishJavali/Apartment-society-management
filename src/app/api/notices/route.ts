@@ -13,7 +13,7 @@ export const GET = route("ANY", async ({ req, user }) => {
   await connectMongo();
 
   const filter: FilterQuery<NoticeDoc> = {};
-  const audiences = visibleAudiences(user.role, user.residentType);
+  const audiences = visibleAudiences(user.role, user.residencies.map((r) => r.residentType));
   if (audiences === "ALL_AUDIENCES") {
     if (q.status) filter.status = q.status;
     if (q.audience) filter.audience = q.audience;

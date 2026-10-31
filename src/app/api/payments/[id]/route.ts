@@ -1,8 +1,8 @@
-import { badRequest, notFound, ok, parseBody, parseId, route } from "@/lib/api";
+import { badRequest, forbidden, notFound, ok, parseBody, parseId, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { validatePaymentState } from "@/lib/rules";
 import { paymentPatch } from "@/lib/schemas";
-import { assertApartmentAccess, assertBillingAccess, toDateOnly } from "@/server/helpers";
+import { assertBillingAccess, toDateOnly } from "@/server/helpers";
 
 type P = { id: string };
 
@@ -13,7 +13,8 @@ export const GET = route<P>(["ADMIN", "RESIDENT"], async ({ user, params }) => {
     include: { apartment: { select: { block: true, flatNo: true } } },
   });
   if (!payment) throw notFound("Payment");
-  assertApartmentAccess(user, payment.apartmentId);
+  // Only owners of that particular flat: owning flat A does not reveal the bills of flat B you rent.
+  if (user.role === "RESIDENT" && !user.ownedApartmentIds.includes(payment.apartmentId)) throw forbidden();
   return ok(payment);
 });
 

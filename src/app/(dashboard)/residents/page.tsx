@@ -16,6 +16,7 @@ type Resident = {
   residentType: "OWNER" | "TENANT";
   isActive: boolean;
   apartment: { block: string; flatNo: string };
+  account?: { id: number; username: string } | null;
 };
 
 export default function ResidentsPage() {
@@ -49,8 +50,8 @@ export default function ResidentsPage() {
   return (
     <>
       <ResourcePage<Resident>
-        title={isAdmin ? "Residents" : user.residentType === "OWNER" ? "My household" : "My profile"}
-        description={isAdmin ? "Owners and tenants, linked to their flats." : user.residentType === "OWNER" ? "Everyone registered in your flat, including tenants." : "Your profile."}
+        title={isAdmin ? "Residents" : user.isOwner ? "My household" : "My profile"}
+        description={isAdmin ? "Owners and tenants, one row per person per flat. A person with several flats has several rows sharing one login." : user.isOwner ? "Everyone registered in the flats you own, including tenants, plus your own rows." : "Your profile."}
         endpoint="/api/residents"
         refreshKey={refresh}
         searchPlaceholder="Search name, email or phone…"
@@ -65,6 +66,7 @@ export default function ResidentsPage() {
           { header: "Type", cell: (r) => <Badge value={r.residentType} /> },
           { header: "Phone", cell: (r) => r.phone ?? "—" },
           { header: "Email", cell: (r) => r.email ?? "—" },
+          ...(isAdmin ? [{ header: "Login", cell: (r: Resident) => r.account?.username ?? "—" }] : []),
           { header: "Status", cell: (r) => <Badge value={r.isActive ? "AVAILABLE" : "INACTIVE"} /> },
         ]}
         createFields={isAdmin ? fields : undefined}

@@ -8,7 +8,7 @@ import { pageArgs, pageMeta } from "@/server/helpers";
 export const GET = route(["ADMIN", "RESIDENT", "SECURITY"], async ({ req, user }) => {
   const query = parseQuery(req, paginationQuery);
   const where: Prisma.ApartmentWhereInput = {};
-  if (user.role === "RESIDENT") where.id = user.apartmentId ?? -1;
+  if (user.role === "RESIDENT") where.id = { in: user.apartmentIds };
   if (query.q) {
     where.OR = [{ block: { contains: query.q } }, { flatNo: { contains: query.q } }];
   }

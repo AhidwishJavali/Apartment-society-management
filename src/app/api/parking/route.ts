@@ -8,7 +8,7 @@ import { pageArgs, pageMeta } from "@/server/helpers";
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   const q = parseQuery(req, parkingQuery);
   const where: Prisma.ParkingSpaceWhereInput = {};
-  if (user.role === "RESIDENT") where.apartmentId = user.apartmentId ?? -1;
+  if (user.role === "RESIDENT") where.apartmentId = { in: user.apartmentIds };
   if (q.status) where.status = q.status;
   if (q.vehicleType) where.vehicleType = q.vehicleType;
   if (q.q) where.slotNumber = { contains: q.q };

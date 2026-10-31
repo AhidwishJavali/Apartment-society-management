@@ -2,14 +2,15 @@ import type { Prisma } from "@prisma/client";
 import { badRequest, created, notFound, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { vehicleBody, vehicleQuery } from "@/lib/schemas";
-import { pageArgs, pageMeta } from "@/server/helpers";
+import { pageArgs, pageMeta, visibleResidentsWhere } from "@/server/helpers";
 import { allocateSlot } from "@/server/parking";
 import { vehicleInclude as include } from "@/server/includes";
 
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   const q = parseQuery(req, vehicleQuery);
   const where: Prisma.VehicleWhereInput = {};
-  if (user.role === "RESIDENT") where.resident = { apartmentId: user.apartmentId ?? -1 };
+  // Residents see their own vehicles, plus every vehicle in flats they own.
+  if (user.role === "RESIDENT") where.resident = visibleResidentsWhere(user);
   else if (q.residentId) where.residentId = q.residentId;
   if (q.active) where.isActive = q.active === "true";
   if (q.q) {

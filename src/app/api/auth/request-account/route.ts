@@ -28,7 +28,10 @@ export const POST = publicRoute(async (req) => {
     prisma.userAccount.findFirst({ where: { OR: [{ username: body.username }, { email: body.email }] }, select: { id: true } }),
     prisma.accountRequest.findFirst({ where: { status: "PENDING", OR: [{ username: body.username }, { email: body.email }] }, select: { id: true } }),
   ]);
-  if (account || pending) throw conflict("That username or email is already registered or awaiting approval");
+  if (account) {
+    throw conflict("That username or email already has an account. If you need another flat added to it, ask the administrator to link it.");
+  }
+  if (pending) throw conflict("A request with that username or email is already awaiting approval");
 
   const { password, ...rest } = body;
   await prisma.accountRequest.create({ data: { ...rest, passwordHash: await hashPassword(password) } });

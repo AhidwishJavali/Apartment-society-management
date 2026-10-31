@@ -1,5 +1,6 @@
-import type { CurrentUser } from "@/lib/auth";
-import { forbidden } from "@/lib/api";
+import type { Prisma } from "@prisma/client";
+import type { CurrentUser, Residency } from "@/lib/auth";
+import { badRequest, forbidden } from "@/lib/api";
 import { connectMongo } from "@/lib/mongodb";
 import { ComplaintActivity } from "@/models";
 
@@ -11,18 +12,43 @@ export const pageMeta = (q: { page: number; pageSize: number }, total: number) =
   totalPages: Math.max(1, Math.ceil(total / q.pageSize)),
 });
 
-/** Maintenance billing is the owner's concern: tenants of a flat never see its bills. */
+/** Maintenance billing is the owner's concern: someone who only rents never sees bills. */
 export function assertBillingAccess(user: CurrentUser) {
-  if (user.role === "RESIDENT" && user.residentType !== "OWNER") {
+  if (user.role === "RESIDENT" && user.ownedApartmentIds.length === 0) {
     throw forbidden("Maintenance bills are handled by the flat's owner");
   }
 }
 
-/** Residents may only touch their own apartment; admins may touch any. */
+/** Flats whose bills this user may see (undefined = all, for admins). */
+export function billableApartments(user: CurrentUser): number[] | undefined {
+  return user.role === "ADMIN" ? undefined : user.ownedApartmentIds;
+}
+
+/** Residents may only touch flats they live in or own; admins may touch any. */
 export function assertApartmentAccess(user: CurrentUser, apartmentId: number | null) {
   if (user.role === "ADMIN") return;
-  if (user.role === "RESIDENT" && user.apartmentId !== null && user.apartmentId === apartmentId) return;
+  if (user.role === "RESIDENT" && apartmentId !== null && user.apartmentIds.includes(apartmentId)) return;
   throw forbidden();
+}
+
+/** Residents visible to this user: their own residency rows, plus everyone in flats they own. */
+export function visibleResidentsWhere(user: CurrentUser): Prisma.ResidentWhereInput {
+  return { OR: [{ id: { in: user.residentIds } }, { apartmentId: { in: user.ownedApartmentIds } }] };
+}
+
+/**
+ * Picks which of the user's residencies an action (complaint, feedback) is filed under. With one
+ * flat it is implicit; with several the client must say which, and it must be one of theirs.
+ */
+export function pickResidency(user: CurrentUser, residentId: number | undefined): Residency {
+  if (residentId !== undefined) {
+    const match = user.residencies.find((r) => r.residentId === residentId);
+    if (!match) throw forbidden("That flat is not one of yours");
+    return match;
+  }
+  if (user.residencies.length === 1) return user.residencies[0];
+  if (user.residencies.length === 0) throw badRequest("Your account is not linked to a flat");
+  throw badRequest("You have more than one flat: choose which one this is for", { fieldErrors: { residentId: ["Choose a flat"] } });
 }
 
 export const toDateOnly = (value: string) => new Date(`${value}T00:00:00.000Z`);

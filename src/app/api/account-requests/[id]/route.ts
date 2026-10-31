@@ -1,7 +1,7 @@
 import { badRequest, conflict, notFound, ok, parseBody, parseId, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { accountRequestPatch } from "@/lib/schemas";
-import { assertLinkable, requestSelect } from "@/server/accounts";
+import { assertLinkable, linkResidency, requestSelect } from "@/server/accounts";
 
 type P = { id: string };
 
@@ -37,10 +37,10 @@ export const PATCH = route<P>(["ADMIN"], async ({ req, user, params }) => {
         email: request.email,
         passwordHash: request.passwordHash, // the requester's own password, already hashed
         role: body.role,
-        residentId: body.residentId ?? null,
         staffId: body.staffId ?? null,
       },
     });
+    if (body.residentId) await linkResidency(tx, account.id, body.residentId);
     await tx.accountRequest.update({ where: { id }, data: { createdAccountId: account.id } });
   });
 

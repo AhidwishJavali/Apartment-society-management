@@ -53,7 +53,17 @@ export default function FeedbackPage() {
           { header: "Submitted", cell: (f) => dateTime(f.submittedAt) },
           { header: "Status", cell: (f) => <Badge value={f.status} /> },
         ]}
-        createFields={user.role === "RESIDENT" ? submitFields : undefined}
+        createFields={
+          user.role === "RESIDENT"
+            ? [
+                // Someone with several flats says which flat the feedback is from.
+                ...(user.residencies.length > 1
+                  ? [{ name: "residentId", label: "Which flat?", type: "select" as const, required: true, options: user.residencies.map((r) => ({ value: r.residentId, label: `${r.label} (${r.residentType.toLowerCase()})` })) }]
+                  : []),
+                ...submitFields,
+              ]
+            : undefined
+        }
         createLabel="Submit feedback"
         rowActions={isAdmin ? (f) => (
           <Button size="sm" variant="secondary" onClick={() => setReviewing(f)}>

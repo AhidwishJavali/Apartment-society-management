@@ -13,7 +13,9 @@ export const GET = route<P>(["ADMIN", "RESIDENT"], async ({ user, params }) => {
     include: { ...include, resident: { select: { id: true, name: true, apartmentId: true, apartment: { select: { block: true, flatNo: true } } } } },
   });
   if (!vehicle) throw notFound("Vehicle");
-  if (user.role === "RESIDENT" && vehicle.resident.apartmentId !== user.apartmentId) throw forbidden();
+  if (user.role === "RESIDENT" && !user.residentIds.includes(vehicle.resident.id) && !user.ownedApartmentIds.includes(vehicle.resident.apartmentId)) {
+    throw forbidden();
+  }
   return ok(vehicle);
 });
 
@@ -22,8 +24,9 @@ export const PATCH = route<P>(["ADMIN"], async ({ req, params }) => {
   const body = await parseBody(req, vehiclePatch);
 
   const vehicle = await prisma.$transaction(async (tx) => {
-    const existing = await tx.vehicle.findUnique({ where: { id }, include: { parking: true } });
+    const existing = await tx.vehicle.findUnique({ where: { id }, include: { parking: true, resident: true } });
     if (!existing) throw notFound("Vehicle");
+    if (body.isActive === true && !existing.resident.isActive) throw badRequest("The vehicle's resident is inactive");
 
     const nextType = body.vehicleType ?? existing.vehicleType;
     if (existing.parking && !isSlotCompatible(nextType, existing.parking.vehicleType)) {
@@ -35,7 +38,8 @@ export const PATCH = route<P>(["ADMIN"], async ({ req, params }) => {
 
     await tx.vehicle.update({
       where: { id },
-      data: { vehicleNumber: body.vehicleNumber, vehicleType: body.vehicleType, brand: body.brand ?? undefined, isActive: body.isActive },
+      // brand: null clears it, undefined leaves it unchanged.
+      data: { vehicleNumber: body.vehicleNumber, vehicleType: body.vehicleType, brand: body.brand, isActive: body.isActive },
     });
 
     if (typeof body.parkingId === "number") {

@@ -31,6 +31,8 @@ const residents = [
   [8, 8, "Neha Kapoor", "9876500008", "neha@example.test", "OWNER"],
   [9, 9, "Rohan Desai", "9876500009", "rohan@example.test", "TENANT"],
   [10, 10, "Meera Nair", "9876500010", "meera@example.test", "OWNER"],
+  // Arjun also owns A-201 and rents it to Rahul: one person, two flats, one login.
+  [11, 3, "Arjun Rao", "9876500001", "arjun@example.test", "OWNER"],
 ] as const;
 
 const staff = [
@@ -78,11 +80,11 @@ const complaints = [
 ] as const;
 
 const DEMO_ACCOUNTS = [
-  { username: "admin", email: "admin@society.test", role: "ADMIN", residentId: null, staffId: null },
-  { username: "resident", email: "arjun@example.test", role: "RESIDENT", residentId: 1, staffId: null },
-  { username: "tenant", email: "rahul@example.test", role: "RESIDENT", residentId: 3, staffId: null },
-  { username: "maintenance", email: "suresh.staff@society.test", role: "MAINTENANCE", residentId: null, staffId: 1 },
-  { username: "security", email: "mahesh.staff@society.test", role: "SECURITY", residentId: null, staffId: 3 },
+  { username: "admin", email: "admin@society.test", role: "ADMIN", residentIds: [], staffId: null },
+  { username: "resident", email: "arjun@example.test", role: "RESIDENT", residentIds: [1, 11], staffId: null },
+  { username: "tenant", email: "rahul@example.test", role: "RESIDENT", residentIds: [3], staffId: null },
+  { username: "maintenance", email: "suresh.staff@society.test", role: "MAINTENANCE", residentIds: [], staffId: 1 },
+  { username: "security", email: "mahesh.staff@society.test", role: "SECURITY", residentIds: [], staffId: 3 },
 ] as const;
 
 async function confirmReset() {
@@ -149,11 +151,15 @@ async function seedMysql() {
 /** Creates missing demo accounts with freshly generated passwords; existing accounts are left untouched. */
 async function seedAccounts() {
   const created: { username: string; password: string; role: string }[] = [];
-  for (const account of DEMO_ACCOUNTS) {
-    if (await prisma.userAccount.findUnique({ where: { username: account.username } })) continue;
-    const password = randomBytes(9).toString("base64url");
-    await prisma.userAccount.create({ data: { ...account, passwordHash: await bcrypt.hash(password, 12) } });
-    created.push({ username: account.username, password, role: account.role });
+  for (const { residentIds, ...account } of DEMO_ACCOUNTS) {
+    let row = await prisma.userAccount.findUnique({ where: { username: account.username } });
+    if (!row) {
+      const password = randomBytes(9).toString("base64url");
+      row = await prisma.userAccount.create({ data: { ...account, passwordHash: await bcrypt.hash(password, 12) } });
+      created.push({ username: account.username, password, role: account.role });
+    }
+    // Link residencies that are not linked yet (also upgrades databases seeded before multi-flat support).
+    await prisma.resident.updateMany({ where: { id: { in: [...residentIds] }, accountId: null }, data: { accountId: row.id } });
   }
   return created;
 }
