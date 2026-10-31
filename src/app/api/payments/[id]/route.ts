@@ -2,11 +2,12 @@ import { badRequest, notFound, ok, parseBody, parseId, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { validatePaymentState } from "@/lib/rules";
 import { paymentPatch } from "@/lib/schemas";
-import { assertApartmentAccess, toDateOnly } from "@/server/helpers";
+import { assertApartmentAccess, assertBillingAccess, toDateOnly } from "@/server/helpers";
 
 type P = { id: string };
 
 export const GET = route<P>(["ADMIN", "RESIDENT"], async ({ user, params }) => {
+  assertBillingAccess(user);
   const payment = await prisma.maintenancePayment.findUnique({
     where: { id: parseId(params.id) },
     include: { apartment: { select: { block: true, flatNo: true } } },

@@ -1,7 +1,8 @@
-import { badRequest, created, notFound, ok, parseBody, parseQuery, route } from "@/lib/api";
+import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { accountBody, paginationQuery } from "@/lib/schemas";
+import { assertLinkable } from "@/server/accounts";
 import { pageArgs, pageMeta } from "@/server/helpers";
 
 const select = {
@@ -28,17 +29,7 @@ export const GET = route(["ADMIN"], async ({ req }) => {
 export const POST = route(["ADMIN"], async ({ req }) => {
   const body = await parseBody(req, accountBody);
 
-  if (body.residentId) {
-    const resident = await prisma.resident.findUnique({ where: { id: body.residentId } });
-    if (!resident || !resident.isActive) throw notFound("Active resident");
-  }
-  if (body.staffId) {
-    const staff = await prisma.staff.findUnique({ where: { id: body.staffId } });
-    if (!staff || !staff.isActive) throw notFound("Active staff member");
-    if (body.role === "SECURITY" && !/security/i.test(staff.role)) {
-      throw badRequest("SECURITY accounts must link to a staff member whose role is Security", { fieldErrors: { staffId: ["Not a security role"] } });
-    }
-  }
+  await assertLinkable(prisma, body.role, body.residentId, body.staffId);
 
   const account = await prisma.userAccount.create({
     data: {

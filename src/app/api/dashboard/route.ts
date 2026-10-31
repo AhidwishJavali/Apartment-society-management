@@ -22,12 +22,13 @@ export const GET = route("ANY", async ({ user }) => {
   const charts: Charts = {};
 
   if (user.role === "ADMIN") {
-    const [apartments, residents, pending, openComplaints, available] = await Promise.all([
+    const [apartments, residents, pending, openComplaints, available, requests] = await Promise.all([
       prisma.apartment.count(),
       prisma.resident.count({ where: { isActive: true } }),
       prisma.maintenancePayment.aggregate({ where: { status: "PENDING" }, _count: { _all: true }, _sum: { amount: true } }),
       prisma.complaint.count({ where: { status: { not: "RESOLVED" } } }),
       prisma.parkingSpace.count({ where: { status: "AVAILABLE" } }),
+      prisma.accountRequest.count({ where: { status: "PENDING" } }),
     ]);
     const [byMonth, byStatus] = await Promise.all([
       prisma.maintenancePayment.groupBy({ by: ["paymentMonth", "status"], _sum: { amount: true }, orderBy: { paymentMonth: "desc" }, take: 24 }),
@@ -48,22 +49,39 @@ export const GET = route("ANY", async ({ user }) => {
       { key: "pendingAmount", label: "Pending amount (₹)", value: Number(pending._sum.amount ?? 0) },
       { key: "complaints", label: "Open complaints", value: openComplaints, href: "/complaints" },
       { key: "parking", label: "Available parking", value: available, href: "/parking" },
+      { key: "requests", label: "Pending account requests", value: requests, href: "/account-requests" },
     );
   }
 
   if (user.role === "RESIDENT") {
     const apartmentId = user.apartmentId ?? -1;
-    const [pending, myOpen, parking] = await Promise.all([
-      prisma.maintenancePayment.aggregate({ where: { apartmentId, status: "PENDING" }, _count: { _all: true }, _sum: { amount: true } }),
-      prisma.complaint.count({ where: { residentId: user.residentId ?? -1, status: { not: "RESOLVED" } } }),
+    const residentId = user.residentId ?? -1;
+    const [myOpen, parking, vehicles] = await Promise.all([
+      prisma.complaint.count({ where: { residentId, status: { not: "RESOLVED" } } }),
       prisma.parkingSpace.count({ where: { apartmentId } }),
+      prisma.vehicle.count({ where: { isActive: true, resident: user.residentType === "OWNER" ? { apartmentId } : { id: residentId } } }),
     ]);
-    stats.push(
-      { key: "pending", label: "Pending bills", value: pending._count._all, href: "/payments" },
-      { key: "pendingAmount", label: "Pending balance (₹)", value: Number(pending._sum.amount ?? 0) },
-      { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
-      { key: "parking", label: "My parking slots", value: parking, href: "/parking" },
-    );
+    if (user.residentType === "OWNER") {
+      // Owners are billed for the flat and see who lives in it.
+      const [pending, household] = await Promise.all([
+        prisma.maintenancePayment.aggregate({ where: { apartmentId, status: "PENDING" }, _count: { _all: true }, _sum: { amount: true } }),
+        prisma.resident.count({ where: { apartmentId, isActive: true } }),
+      ]);
+      stats.push(
+        { key: "pending", label: "Pending bills", value: pending._count._all, href: "/payments" },
+        { key: "pendingAmount", label: "Pending balance (₹)", value: Number(pending._sum.amount ?? 0) },
+        { key: "household", label: "People in my flat", value: household, href: "/residents" },
+        { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
+        { key: "parking", label: "Flat parking slots", value: parking, href: "/parking" },
+        { key: "vehicles", label: "Flat vehicles", value: vehicles, href: "/vehicles" },
+      );
+    } else {
+      stats.push(
+        { key: "complaints", label: "My open complaints", value: myOpen, href: "/complaints" },
+        { key: "parking", label: "Parking slot for my flat", value: parking, href: "/parking" },
+        { key: "vehicles", label: "My vehicles", value: vehicles, href: "/vehicles" },
+      );
+    }
   }
 
   if (user.role === "MAINTENANCE") {

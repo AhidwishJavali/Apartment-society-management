@@ -49,8 +49,8 @@ export default function ResidentsPage() {
   return (
     <>
       <ResourcePage<Resident>
-        title="Residents"
-        description={isAdmin ? "Owners and tenants, linked to their flats." : "Your profile."}
+        title={isAdmin ? "Residents" : user.residentType === "OWNER" ? "My household" : "My profile"}
+        description={isAdmin ? "Owners and tenants, linked to their flats." : user.residentType === "OWNER" ? "Everyone registered in your flat, including tenants." : "Your profile."}
         endpoint="/api/residents"
         refreshKey={refresh}
         searchPlaceholder="Search name, email or phone…"

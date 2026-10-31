@@ -224,3 +224,30 @@ export const accountPatch = z.object({
   isActive: z.boolean().optional(),
   password: z.string().min(10, "At least 10 characters").max(100).optional(),
 });
+
+// ---- Account requests (public sign-up, admin approval) -------------------------------------
+export const accountRequestBody = z.object({
+  fullName: text(100),
+  username: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9._-]+$/, "Letters, digits, . _ - only"),
+  email,
+  password: z.string().min(10, "At least 10 characters").max(100),
+  requestedRole: z.enum(["RESIDENT", "MAINTENANCE", "SECURITY"]),
+  phone: optional(phone),
+  flatInfo: optional(text(50)),
+  message: optional(text(300)),
+});
+
+export const accountRequestQuery = paginationQuery.extend({
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+});
+
+export const accountRequestPatch = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("approve"),
+    role: z.enum(["RESIDENT", "MAINTENANCE", "SECURITY"]),
+    residentId: optional(id),
+    staffId: optional(id),
+    note: optional(text(300)),
+  }),
+  z.object({ action: z.literal("reject"), note: optional(text(300)) }),
+]);

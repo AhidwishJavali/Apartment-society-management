@@ -2,9 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { ok, parseQuery, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { paymentQuery } from "@/lib/schemas";
+import { assertBillingAccess } from "@/server/helpers";
 
 // Totals are computed in MySQL for the same filters the list endpoint accepts.
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
+  assertBillingAccess(user);
   const q = parseQuery(req, paymentQuery);
   const where: Prisma.MaintenancePaymentWhereInput = {};
   if (user.role === "RESIDENT") where.apartmentId = user.apartmentId ?? -1;

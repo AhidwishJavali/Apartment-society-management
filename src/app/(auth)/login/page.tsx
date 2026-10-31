@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Field, inputClass } from "@/components/ui";
 import { api, ClientError } from "@/lib/client";
@@ -53,6 +54,12 @@ export default function LoginPage() {
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </Button>
+        <p className="text-center text-sm text-slate-600">
+          New here?{" "}
+          <Link href="/request-account" className="font-medium text-brand-700 hover:underline">
+            Request an account
+          </Link>
+        </p>
       </form>
     </main>
   );

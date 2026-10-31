@@ -14,8 +14,12 @@ const query = paginationQuery.extend({
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
   const q = parseQuery(req, query);
   const where: Prisma.ResidentWhereInput = {};
-  if (user.role === "RESIDENT") where.id = user.residentId ?? -1;
-  if (q.apartmentId) where.apartmentId = q.apartmentId;
+  if (user.role === "RESIDENT") {
+    // Owners see everyone in their flat; tenants see only themselves.
+    if (user.residentType === "OWNER") where.apartmentId = user.apartmentId ?? -1;
+    else where.id = user.residentId ?? -1;
+  }
+  if (q.apartmentId && user.role === "ADMIN") where.apartmentId = q.apartmentId;
   if (q.residentType) where.residentType = q.residentType;
   if (q.active) where.isActive = q.active === "true";
   if (q.q) where.OR = [{ name: { contains: q.q } }, { email: { contains: q.q } }, { phone: { contains: q.q } }];

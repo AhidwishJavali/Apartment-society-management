@@ -65,7 +65,7 @@ const BADGE_TONES: Record<string, string> = {
   EXITED: "bg-slate-100 text-slate-700", PUBLISHED: "bg-green-100 text-green-800", REVIEWED: "bg-blue-100 text-blue-800",
   PENDING: "bg-amber-100 text-amber-800", IN_PROGRESS: "bg-amber-100 text-amber-800", DRAFT: "bg-slate-100 text-slate-700",
   OPEN: "bg-red-100 text-red-800", INSIDE: "bg-blue-100 text-blue-800", NEW: "bg-blue-100 text-blue-800", HIGH: "bg-red-100 text-red-800",
-  ALLOCATED: "bg-blue-100 text-blue-800", ARCHIVED: "bg-slate-200 text-slate-600", INACTIVE: "bg-slate-200 text-slate-600",
+  ALLOCATED: "bg-blue-100 text-blue-800", ARCHIVED: "bg-slate-200 text-slate-600", APPROVED: "bg-green-100 text-green-800", REJECTED: "bg-red-100 text-red-800", INACTIVE: "bg-slate-200 text-slate-600",
 };
 
 export function Badge({ value }: { value: string }) {

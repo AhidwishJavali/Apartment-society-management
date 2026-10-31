@@ -15,6 +15,7 @@ erDiagram
     ParkingSpace |o--o| Vehicle : "holds at most one"
     Resident |o--o| UserAccount : "signs in as"
     Staff |o--o| UserAccount : "signs in as"
+    UserAccount |o--o| AccountRequest : "created from"
 
     Apartment {
         int apartment_id PK
@@ -72,6 +73,23 @@ erDiagram
         date complaint_date
         enum status "OPEN, IN_PROGRESS, RESOLVED"
     }
+    AccountRequest {
+        int request_id PK
+        varchar full_name
+        varchar username
+        varchar email
+        varchar password_hash
+        enum requested_role
+        enum status "PENDING, APPROVED, REJECTED"
+        int reviewed_by_user_id "nullable"
+        datetime reviewed_at "nullable"
+        int created_account_id FK "nullable, unique"
+    }
+    LoginAttempt {
+        varchar identifier PK
+        int failures
+        datetime reset_at
+    }
     UserAccount {
         int user_id PK
         varchar username UK
@@ -112,5 +130,6 @@ Checked by introspecting the live MySQL database (`information_schema`) after `n
 | `20261030000000_init` | The full schema, including `UserAccount` |
 | `20261030010000_session_revocation` | Adds nullable `UserAccount.sessions_valid_after` so logout can revoke issued tokens |
 | `20261030020000_login_throttle` | Adds standalone `LoginAttempt` table (no foreign keys) for the shared sign-in throttle |
+| `20261031000000_account_requests` | Adds `AccountRequest` (sign-up requests awaiting admin approval) with a nullable unique foreign key to the account it produced |
 
 No conflicts with the guide were found, so there is nothing to stop and report.

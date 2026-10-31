@@ -8,12 +8,12 @@ import { api } from "@/lib/client";
 import { SessionProvider, useSession } from "./session";
 import { Button, ToastProvider } from "./ui";
 
-const NAV: { href: string; label: string; roles: Role[] }[] = [
+const NAV: { href: string; label: string; roles: Role[]; residentTypes?: ("OWNER" | "TENANT")[] }[] = [
   { href: "/dashboard", label: "Dashboard", roles: ["ADMIN", "RESIDENT", "MAINTENANCE", "SECURITY"] },
   { href: "/apartments", label: "Apartments", roles: ["ADMIN", "RESIDENT"] },
   { href: "/residents", label: "Residents", roles: ["ADMIN", "RESIDENT"] },
   { href: "/staff", label: "Staff", roles: ["ADMIN"] },
-  { href: "/payments", label: "Payments", roles: ["ADMIN", "RESIDENT"] },
+  { href: "/payments", label: "Payments", roles: ["ADMIN", "RESIDENT"], residentTypes: ["OWNER"] },
   { href: "/parking", label: "Parking", roles: ["ADMIN", "RESIDENT"] },
   { href: "/vehicles", label: "Vehicles", roles: ["ADMIN", "RESIDENT"] },
   { href: "/complaints", label: "Complaints", roles: ["ADMIN", "RESIDENT", "MAINTENANCE"] },
@@ -21,13 +21,15 @@ const NAV: { href: string; label: string; roles: Role[] }[] = [
   { href: "/notices", label: "Notices", roles: ["ADMIN", "RESIDENT", "MAINTENANCE", "SECURITY"] },
   { href: "/feedback", label: "Feedback", roles: ["ADMIN", "RESIDENT"] },
   { href: "/accounts", label: "Accounts", roles: ["ADMIN"] },
+  { href: "/account-requests", label: "Requests", roles: ["ADMIN"] },
 ];
 
 function Shell({ children }: { children: ReactNode }) {
   const user = useSession();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = NAV.filter((n) => n.roles.includes(user.role));
+  const items = NAV.filter((n) => n.roles.includes(user.role) && (user.role !== "RESIDENT" || !n.residentTypes || (user.residentType !== null && n.residentTypes.includes(user.residentType))))
+    .map((n) => (user.role === "RESIDENT" && n.href === "/residents" ? { ...n, label: user.residentType === "OWNER" ? "My household" : "My profile" } : n));
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
@@ -59,7 +61,7 @@ function Shell({ children }: { children: ReactNode }) {
           </button>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-slate-600">
-              {user.displayName} · <span className="font-medium">{user.role.toLowerCase()}</span>
+              {user.displayName} · <span className="font-medium">{user.role === "RESIDENT" && user.residentType ? user.residentType.toLowerCase() : user.role.toLowerCase()}</span>
             </span>
             <Button variant="secondary" size="sm" onClick={logout}>
               Sign out
