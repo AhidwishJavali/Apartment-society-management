@@ -95,7 +95,7 @@ export default function DashboardPage() {
             const body = (
               <div className={`rounded-lg border bg-white p-4 ${s.error ? "border-amber-300" : "border-slate-200"} ${s.href ? "hover:border-brand-500" : ""}`}>
                 <div className="text-sm text-slate-500">{s.label.replace(" (₹)", "")}</div>
-                <div className="mt-1 text-3xl font-semibold text-slate-900">{value}</div>
+                <div className={`mt-1 font-semibold text-slate-900 ${typeof s.value === "string" && s.key !== "pendingAmount" ? "text-lg" : "text-3xl"}`}>{value}</div>
               </div>
             );
             return s.href ? (

@@ -26,6 +26,8 @@ A full-stack web application for running an apartment society: flats and residen
 
 ---
 
+> **New here?** [docs/Walkthrough.pdf](docs/Walkthrough.pdf) is a 21-page illustrated walkthrough: architecture, password hashing and sessions, roles, data model, workflows and edge cases.
+
 ## 1. Project status and what is left
 
 ### Mapping to the "Task remaining for next phase" list
