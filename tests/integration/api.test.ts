@@ -173,7 +173,9 @@ d("API against live databases", () => {
     const one = await import("@/app/api/complaints/[id]/route");
 
     await as(residentUserId, "RESIDENT");
-    const filed = await call(complaints.POST, "POST", "/api/complaints", { category: "Plumbing", description: `${tag} leaking tap in kitchen` });
+    // The demo owner has more than one flat, so the complaint names one of theirs.
+    const flat = await prisma.resident.findFirstOrThrow({ where: { accountId: residentUserId, isActive: true }, orderBy: { id: "asc" } });
+    const filed = await call(complaints.POST, "POST", "/api/complaints", { category: "Plumbing", description: `${tag} leaking tap in kitchen`, residentId: flat.id });
     expect(filed.status).toBe(201);
     const id = String(filed.json.data.id);
     ids.complaints.push(filed.json.data.id);
