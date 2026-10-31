@@ -26,7 +26,7 @@ A full-stack web application for running an apartment society: flats and residen
 
 ---
 
-> **New here?** [docs/Walkthrough.pdf](docs/Walkthrough.pdf) is a 21-page illustrated walkthrough: architecture, password hashing and sessions, roles, data model, workflows and edge cases.
+> **New here?** [docs/Walkthrough.pdf](docs/Walkthrough.pdf) is a 21-page illustrated walkthrough: architecture, password hashing and sessions, roles, data model, workflows and edge cases. [docs/DBMS_Presentation.pptx](docs/DBMS_Presentation.pptx) is the 20-slide class presentation (ER diagram, schema, normalization, SQL, transactions, indexes), with speaker notes.
 
 ## 1. Project status and what is left
 
@@ -388,7 +388,7 @@ The `prisma/schema.prisma` file is the source of truth; edit it and run `npm run
 
 | Rule | Where |
 | --- | --- |
-| One flat per `(block, flat_no)`; one bill per `(apartment, month)`; unique phone, email, slot number, vehicle number | Unique indexes |
+| One flat per `(block, flat_no)`; one bill per `(apartment, month)`; one row per login per flat `(account_id, apartment_id)`; unique staff phone, username, account email, slot number, vehicle number | Unique indexes |
 | A slot holds at most one vehicle | Unique `Vehicle.parking_id` |
 | Apartment/resident/payment history cannot be orphaned | Foreign keys with `ON DELETE RESTRICT` |
 | Vehicle type must match slot type; slot must be `AVAILABLE` to allocate | API (transaction + conditional update) |
@@ -403,13 +403,13 @@ The `prisma/schema.prisma` file is the source of truth; edit it and run `npm run
 | Table | Rows |
 | --- | --- |
 | Apartment | 10 |
-| Resident | 10 |
+| Resident | 11 (Arjun Rao has a row in two flats) |
 | Staff | 10 |
 | ParkingSpace | 12 (10 allocated, 2 free) |
 | Vehicle | 10 |
 | MaintenancePayment | 15 (10 for 2026-10, 5 for 2026-09) |
 | Complaint | 10 (3 OPEN, 3 IN_PROGRESS, 4 RESOLVED) |
-| UserAccount | 4 |
+| UserAccount | 5 |
 
 ### Handy SQL
 
