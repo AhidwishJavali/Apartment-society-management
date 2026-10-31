@@ -1,6 +1,6 @@
 import "./load-env";
 import { randomBytes } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import readline from "node:readline/promises";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
@@ -80,6 +80,7 @@ const complaints = [
 const DEMO_ACCOUNTS = [
   { username: "admin", email: "admin@society.test", role: "ADMIN", residentId: null, staffId: null },
   { username: "resident", email: "arjun@example.test", role: "RESIDENT", residentId: 1, staffId: null },
+  { username: "tenant", email: "rahul@example.test", role: "RESIDENT", residentId: 3, staffId: null },
   { username: "maintenance", email: "suresh.staff@society.test", role: "MAINTENANCE", residentId: null, staffId: 1 },
   { username: "security", email: "mahesh.staff@society.test", role: "SECURITY", residentId: null, staffId: 3 },
 ] as const;
@@ -99,6 +100,7 @@ async function confirmReset() {
 async function wipe() {
   await prisma.$transaction([
     prisma.loginAttempt.deleteMany(),
+    prisma.accountRequest.deleteMany(),
     prisma.userAccount.deleteMany(),
     prisma.complaint.deleteMany(),
     prisma.vehicle.deleteMany(),
@@ -258,7 +260,7 @@ async function main() {
   if (created.length) {
     const lines = created.map((a) => `${a.role.padEnd(12)} username: ${a.username.padEnd(12)} password: ${a.password}`);
     console.log("\nDemo accounts created (shown once, also saved to .demo-credentials.local):\n" + lines.join("\n"));
-    writeFileSync(".demo-credentials.local", lines.join("\n") + "\n", { mode: 0o600 });
+    writeFileSync(".demo-credentials.local", lines.join("\n") + "\n", { mode: 0o600, flag: existsSync(".demo-credentials.local") && !process.argv.includes("--reset") ? "a" : "w" });
   } else {
     console.log("\nDemo accounts already exist - passwords unchanged. Run `npm run db:reset` to regenerate them.");
   }

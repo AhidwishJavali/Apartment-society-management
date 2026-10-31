@@ -2,9 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { created, ok, parseBody, parseQuery, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { paymentBody, paymentQuery } from "@/lib/schemas";
-import { pageArgs, pageMeta, toDateOnly } from "@/server/helpers";
+import { assertBillingAccess, pageArgs, pageMeta, toDateOnly } from "@/server/helpers";
 
 export const GET = route(["ADMIN", "RESIDENT"], async ({ req, user }) => {
+  assertBillingAccess(user);
   const q = parseQuery(req, paymentQuery);
   const where: Prisma.MaintenancePaymentWhereInput = {};
   if (user.role === "RESIDENT") where.apartmentId = user.apartmentId ?? -1;

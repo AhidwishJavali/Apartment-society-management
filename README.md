@@ -42,7 +42,7 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | Maintenance-payment tracking | Built (paid/pending, totals, mark paid, duplicate-bill guard) |
 | Parking and vehicle management | Built (allocate/release, type compatibility, no double allocation) |
 | Search / filter | Built (search box, filters and pagination on every list) |
-| Test database operations and relationships | Built: 21 unit tests plus 11 integration tests that run against live MySQL and MongoDB |
+| Test database operations and relationships | Built: 21 unit tests plus 13 integration tests that run against live MySQL and MongoDB |
 | Integrate all modules into the final system | Built and run end to end (migration, seed, login, every list endpoint and page) |
 
 ### Verification
@@ -52,9 +52,9 @@ The original proposal ([docs/Project_Proposal_and_Further_Plan.docx](docs/Projec
 | `npm run lint` | passes |
 | `npm run typecheck` | passes |
 | `npm run build` | passes |
-| `npm test` | 21 unit tests pass (11 integration tests are skipped unless a database is available) |
+| `npm test` | 21 unit tests pass (13 integration tests are skipped unless a database is available) |
 | `npm run db:setup` | migrations, Mongo indexes and seed run cleanly on live MySQL and MongoDB |
-| `npm run test:integration` | 11 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation, DB-backed login throttle |
+| `npm run test:integration` | 13 tests pass against live databases: duplicate bill (409), PAID needs a date, role denials (401/403), resident scoping, bike-in-car-slot rejected, double allocation rejected, concurrent allocation (exactly one winner), complaint lifecycle with MongoDB timeline, visitor exit once, logout revocation, DB-backed login throttle, account request approval flow, owner vs tenant access |
 | Smoke test of `next start` | login works, bad password gives 401, all list endpoints and pages return 200 |
 | CI | `.github/workflows/ci.yml` runs lint, typecheck, tests, build, `db:setup` and the integration tests against MySQL and MongoDB service containers |
 
@@ -161,18 +161,28 @@ npm run db:reset
 | Username | Role | Linked record | Lands on |
 | --- | --- | --- | --- |
 | `admin` | Administrator | standalone | Dashboard |
-| `resident` | Resident | Arjun Rao, flat A-101 | Dashboard |
+| `resident` | Resident (owner) | Arjun Rao, flat A-101 | Dashboard |
+| `tenant` | Resident (tenant) | Rahul Mehta, flat B-101 | Dashboard |
 | `maintenance` | Maintenance staff | Suresh Kumar (Electrician) | Complaints |
 | `security` | Security | Mahesh Rao (Security Guard) | Visitors |
 
-Passwords come from the seed output / `.demo-credentials.local`. Admins can create accounts and reset passwords on the **Accounts** page.
+Passwords come from the seed output / `.demo-credentials.local`. Admins can create accounts and reset passwords on the **Accounts** page. New people can also ask for an account themselves; see [Requesting an account](#requesting-an-account).
 
 | Role | What they can do |
 | --- | --- |
 | Administrator | Everything: apartments, residents, staff, payments, parking, vehicles, complaints (assign, change status), visitors, notices, feedback review, accounts |
-| Resident | Own profile and flat; own flat's payment history and pending balance; own flat's parking and vehicles; create and track own complaints; read notices for their audience; submit feedback |
+| Resident, **owner** | Own flat; **the flat's maintenance bills and pending balance**; **everyone registered in the flat (household), including tenants**; the flat's parking and vehicles; create and track own complaints; read notices for owners; submit feedback |
+| Resident, **tenant** | Own flat; **own profile only**; parking and vehicles; create and track own complaints; read notices for tenants; submit feedback. **No access to maintenance bills** (billing belongs to the owner) and a different dashboard and menu |
 | Maintenance | See complaints assigned to them; mark In progress work Resolved; add work notes; read notices |
 | Security | Register visitor entry and exit; search visitor history; read notices. **No payment access** |
+
+The owner and tenant views differ in the menu ("My household" vs "My profile", Payments only for owners), the dashboard figures, and, enforced on the server, the payment and resident endpoints (a tenant gets 403 on `/api/payments`).
+
+### Requesting an account
+
+1. On the sign-in page choose **Request an account** and fill in the form (name, username, email, password, role, flat, optional note). The password is hashed immediately and nothing can sign in yet. Requests are limited to 5 per hour per address.
+2. An administrator opens **Requests** in the menu (the dashboard also shows the pending count), reviews the person and either **Approves** (choosing the role and the linked resident or staff record, which creates the account with the password they chose) or **Rejects** with an optional reason.
+3. Every request stays in the `AccountRequest` MySQL table with who reviewed it, when, and the resulting account, so there is a full audit trail. Two admins reviewing at once is safe: only one review can claim a pending request.
 
 Hiding a button is never the authorization. Every API route checks the session, the role and, where relevant, record ownership on the server.
 
@@ -665,7 +675,8 @@ Status codes: 200/201 success, 207 partial success, 400 validation, 401 not sign
 
 | Resource | Endpoints | Who |
 | --- | --- | --- |
-| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` | public / any signed-in |
+| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-account` | public / any signed-in |
+| Account requests | `GET /api/account-requests`, `PATCH /api/account-requests/:id` (actions: `approve`, `reject`) | admin |
 | Apartments | `GET /api/apartments`, `POST`, `GET/PATCH/DELETE /api/apartments/:id` | admin (residents: own flat read; security: list read) |
 | Residents | `GET /api/residents`, `POST`, `GET/PATCH/DELETE /api/residents/:id`, `GET /api/residents/hosts?apartmentId=` | admin (residents: own profile read; the `hosts` id+name list is also open to security) |
 | Staff | `GET /api/staff`, `POST`, `GET/PATCH/DELETE /api/staff/:id` | admin |

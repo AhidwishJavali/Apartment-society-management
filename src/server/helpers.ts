@@ -11,6 +11,13 @@ export const pageMeta = (q: { page: number; pageSize: number }, total: number) =
   totalPages: Math.max(1, Math.ceil(total / q.pageSize)),
 });
 
+/** Maintenance billing is the owner's concern: tenants of a flat never see its bills. */
+export function assertBillingAccess(user: CurrentUser) {
+  if (user.role === "RESIDENT" && user.residentType !== "OWNER") {
+    throw forbidden("Maintenance bills are handled by the flat's owner");
+  }
+}
+
 /** Residents may only touch their own apartment; admins may touch any. */
 export function assertApartmentAccess(user: CurrentUser, apartmentId: number | null) {
   if (user.role === "ADMIN") return;

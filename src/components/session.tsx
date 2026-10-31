@@ -12,6 +12,7 @@ export type SessionUser = {
   residentId: number | null;
   staffId: number | null;
   apartmentId: number | null;
+  residentType: "OWNER" | "TENANT" | null;
   displayName: string;
 };
 

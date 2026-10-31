@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session-token";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/request-account"];
 
 // Coarse page-level gate only. Every API route re-checks session, role and ownership server-side.
 export async function middleware(req: NextRequest) {

@@ -183,8 +183,9 @@ model UserAccount {
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  resident Resident? @relation(fields: [residentId], references: [id])
-  staff    Staff?    @relation(fields: [staffId], references: [id])
+  resident Resident?       @relation(fields: [residentId], references: [id])
+  staff    Staff?          @relation(fields: [staffId], references: [id])
+  request  AccountRequest?
 
   @@map("UserAccount")
 }
@@ -196,4 +197,37 @@ model LoginAttempt {
   resetAt    DateTime @map("reset_at")
 
   @@map("LoginAttempt")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Sign-up requests from the public form; an admin approves (creating the UserAccount) or rejects.
+model AccountRequest {
+  id               Int           @id @default(autoincrement()) @map("request_id")
+  fullName         String        @map("full_name") @db.VarChar(100)
+  username         String        @db.VarChar(50)
+  email            String        @db.VarChar(100)
+  passwordHash     String        @map("password_hash") @db.VarChar(100)
+  requestedRole    UserRole      @map("requested_role")
+  phone            String?       @db.VarChar(15)
+  flatInfo         String?       @map("flat_info") @db.VarChar(50)
+  message          String?       @db.VarChar(300)
+  status           RequestStatus @default(PENDING)
+  reviewedByUserId Int?          @map("reviewed_by_user_id")
+  reviewedAt       DateTime?     @map("reviewed_at")
+  reviewNote       String?       @map("review_note") @db.VarChar(300)
+  createdAccountId Int?          @unique @map("created_account_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  createdAccount UserAccount? @relation(fields: [createdAccountId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([username])
+  @@index([email])
+  @@map("AccountRequest")
 }

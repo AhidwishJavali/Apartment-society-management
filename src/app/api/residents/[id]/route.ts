@@ -6,7 +6,10 @@ type P = { id: string };
 
 export const GET = route<P>(["ADMIN", "RESIDENT"], async ({ user, params }) => {
   const id = parseId(params.id);
-  if (user.role === "RESIDENT" && user.residentId !== id) throw forbidden();
+  if (user.role === "RESIDENT" && user.residentId !== id) {
+    const target = user.residentType === "OWNER" ? await prisma.resident.findUnique({ where: { id }, select: { apartmentId: true } }) : null;
+    if (!target || target.apartmentId !== user.apartmentId) throw forbidden();
+  }
   const resident = await prisma.resident.findUnique({
     where: { id },
     include: { apartment: true, vehicles: true },

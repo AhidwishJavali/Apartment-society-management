@@ -33,7 +33,7 @@ d("API against live databases", () => {
   let signSession: typeof import("@/lib/session-token").signSession;
   let mongoose: typeof import("mongoose").default;
   const tag = `T${Date.now().toString(36).toUpperCase()}`.slice(0, 9);
-  const ids = { apartments: [] as number[], residents: [] as number[], vehicles: [] as number[], slots: [] as number[], complaints: [] as number[] };
+  const ids = { apartments: [] as number[], residents: [] as number[], vehicles: [] as number[], slots: [] as number[], complaints: [] as number[], requests: [] as number[], accountUsernames: [] as string[] };
   const visitorIds: string[] = [];
   let apt: number, residentUserId: number, adminId: number, maintId: number, securityId: number, staffId: number, otherResident: number;
 
@@ -66,10 +66,14 @@ d("API against live databases", () => {
     await connectMongo();
     await Visitor.deleteMany({ $or: [{ _id: { $in: visitorIds } }, { visitorName: { $regex: `^${tag}` } }] });
     await ComplaintActivity.deleteMany({ complaintId: { $in: ids.complaints } });
+    await prisma.accountRequest.deleteMany({ where: { id: { in: ids.requests } } });
+    await prisma.userAccount.deleteMany({ where: { username: { in: ids.accountUsernames } } });
+    await prisma.loginAttempt.deleteMany({ where: { identifier: { in: [...ids.accountUsernames, "request:local"] } } });
     await prisma.complaint.deleteMany({ where: { id: { in: ids.complaints } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: ids.vehicles } } });
     await prisma.parkingSpace.deleteMany({ where: { id: { in: ids.slots } } });
     await prisma.maintenancePayment.deleteMany({ where: { apartmentId: { in: ids.apartments } } });
+    await prisma.userAccount.deleteMany({ where: { residentId: { in: ids.residents } } });
     await prisma.resident.deleteMany({ where: { id: { in: ids.residents } } });
     await prisma.apartment.deleteMany({ where: { id: { in: ids.apartments } } });
     await prisma.$disconnect();
@@ -233,6 +237,114 @@ d("API against live databases", () => {
     expect(res.json.data).toEqual([{ id: otherResident, name: `${tag} Host` }]);
     await as(residentUserId, "RESIDENT");
     expect((await call(GET, "GET", `/api/residents/hosts?apartmentId=${apt}`)).status).toBe(403);
+  });
+
+  it("runs the account request flow: public request, admin approval, sign-in as the new account", async () => {
+    const reqRoute = await import("@/app/api/auth/request-account/route");
+    const list = await import("@/app/api/account-requests/route");
+    const one = await import("@/app/api/account-requests/[id]/route");
+    const login = await import("@/app/api/auth/login/route");
+    const session = await import("@/app/api/auth/session/route");
+    const uname = `${tag.toLowerCase()}.new`;
+    const password = "a-long-enough-password";
+    const body = { fullName: `${tag} Newcomer`, username: uname, email: `${uname}@example.test`, password, requestedRole: "RESIDENT", flatInfo: `${tag}-1` };
+    jar.token = undefined;
+    await prisma.loginAttempt.deleteMany({ where: { identifier: { startsWith: "request:" } } });
+
+    // Anyone can ask; invalid input and duplicates are refused.
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", { ...body, password: "short" })).status).toBe(400);
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", { ...body, requestedRole: "ADMIN" })).status).toBe(400);
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", body)).status).toBe(201);
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", body)).status).toBe(409);
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", { ...body, username: "admin", email: "other@example.test" })).status).toBe(409);
+
+    // The request cannot sign in yet, and the password is stored hashed.
+    expect((await call(login.POST, "POST", "/api/auth/login", { identifier: uname, password })).status).toBe(401);
+    const row = await prisma.accountRequest.findFirstOrThrow({ where: { username: uname } });
+    expect(row.status).toBe("PENDING");
+    expect(row.passwordHash).not.toContain(password);
+    ids.requests.push(row.id);
+
+    // Only admins can see or review requests; the hash is never returned.
+    await as(residentUserId, "RESIDENT");
+    expect((await call(list.GET, "GET", "/api/account-requests")).status).toBe(403);
+    await as(adminId, "ADMIN");
+    const listed = await call(list.GET, "GET", `/api/account-requests?status=PENDING&q=${uname}`);
+    expect(listed.json.data).toHaveLength(1);
+    expect(JSON.stringify(listed.json)).not.toContain("passwordHash");
+
+    // Approval must link a resident; then it creates the account exactly once.
+    const p = { id: String(row.id) };
+    expect((await call(one.PATCH, "PATCH", `/api/account-requests/${row.id}`, { action: "approve", role: "RESIDENT" }, p)).status).toBe(400);
+    expect((await prisma.accountRequest.findUniqueOrThrow({ where: { id: row.id } })).status).toBe("PENDING"); // rolled back
+    const ok = await call(one.PATCH, "PATCH", `/api/account-requests/${row.id}`, { action: "approve", role: "RESIDENT", residentId: otherResident }, p);
+    expect(ok.status).toBe(200);
+    expect(ok.json.data.status).toBe("APPROVED");
+    expect((await call(one.PATCH, "PATCH", `/api/account-requests/${row.id}`, { action: "reject" }, p)).status).toBe(409);
+
+    // The requester signs in with the password they chose, as a resident of that flat.
+    jar.token = undefined;
+    expect((await call(login.POST, "POST", "/api/auth/login", { identifier: uname, password })).status).toBe(200);
+    const me = await call(session.GET, "GET", "/api/auth/session");
+    expect(me.json.data).toMatchObject({ username: uname, role: "RESIDENT", residentId: otherResident });
+    ids.accountUsernames.push(uname);
+
+    // Rejection path.
+    const rej = { ...body, username: `${uname}2`, email: `${uname}2@example.test` };
+    jar.token = undefined;
+    expect((await call(reqRoute.POST, "POST", "/api/auth/request-account", rej)).status).toBe(201);
+    const r2 = await prisma.accountRequest.findFirstOrThrow({ where: { username: rej.username } });
+    ids.requests.push(r2.id);
+    await as(adminId, "ADMIN");
+    const rejected = await call(one.PATCH, "PATCH", `/api/account-requests/${r2.id}`, { action: "reject", note: "Not a resident" }, { id: String(r2.id) });
+    expect(rejected.json.data).toMatchObject({ status: "REJECTED", reviewNote: "Not a resident" });
+    expect(await prisma.userAccount.count({ where: { username: rej.username } })).toBe(0);
+  });
+
+  it("gives owners and tenants different access (bills, household, dashboard)", async () => {
+    const payments = await import("@/app/api/payments/route");
+    const summary = await import("@/app/api/payments/summary/route");
+    const residents = await import("@/app/api/residents/route");
+    const dash = await import("@/app/api/dashboard/route");
+    const sessionRoute = await import("@/app/api/auth/session/route");
+
+    // One flat with an owner and a tenant, each with a login.
+    const flat = await prisma.apartment.create({ data: { block: tag, floorNo: 2, flatNo: "2", bhk: 3 } });
+    ids.apartments.push(flat.id);
+    const [owner, tenant] = await Promise.all(
+      (["OWNER", "TENANT"] as const).map((t) => prisma.resident.create({ data: { apartmentId: flat.id, name: `${tag} ${t}`, residentType: t } })),
+    );
+    ids.residents.push(owner.id, tenant.id);
+    const [ownerAcc, tenantAcc] = await Promise.all(
+      [owner, tenant].map((r) =>
+        prisma.userAccount.create({ data: { username: `${tag.toLowerCase()}.${r.residentType.toLowerCase()}`, email: `${tag.toLowerCase()}.${r.residentType.toLowerCase()}@example.test`, passwordHash: "x", role: "RESIDENT", residentId: r.id } }),
+      ),
+    );
+    ids.accountUsernames.push(ownerAcc.username, tenantAcc.username);
+    await prisma.maintenancePayment.create({ data: { apartmentId: flat.id, amount: 1800, paymentMonth: "2031-03", status: "PENDING" } });
+
+    // Owner: sees the flat's bills and the whole household, with an owner dashboard.
+    await as(ownerAcc.id, "RESIDENT");
+    const bills = await call(payments.GET, "GET", "/api/payments");
+    expect(bills.status).toBe(200);
+    expect(bills.json.data).toHaveLength(1);
+    expect((await call(summary.GET, "GET", "/api/payments/summary")).status).toBe(200);
+    const household = await call(residents.GET, "GET", "/api/residents?pageSize=50");
+    expect(household.json.data.map((r: { name: string }) => r.name).sort()).toEqual([`${tag} OWNER`, `${tag} TENANT`]);
+    expect((await call(sessionRoute.GET, "GET", "/api/auth/session")).json.data.residentType).toBe("OWNER");
+    const ownerStats = (await call(dash.GET, "GET", "/api/dashboard")).json.data.stats.map((x: { key: string }) => x.key);
+    expect(ownerStats).toEqual(expect.arrayContaining(["pending", "pendingAmount", "household"]));
+
+    // Tenant: no bills at all, only their own profile, and a dashboard without billing figures.
+    await as(tenantAcc.id, "RESIDENT");
+    expect((await call(payments.GET, "GET", "/api/payments")).status).toBe(403);
+    expect((await call(summary.GET, "GET", "/api/payments/summary")).status).toBe(403);
+    const own = await call(residents.GET, "GET", "/api/residents?pageSize=50");
+    expect(own.json.data.map((r: { name: string }) => r.name)).toEqual([`${tag} TENANT`]);
+    expect((await call(sessionRoute.GET, "GET", "/api/auth/session")).json.data.residentType).toBe("TENANT");
+    const tenantStats = (await call(dash.GET, "GET", "/api/dashboard")).json.data.stats.map((x: { key: string }) => x.key);
+    expect(tenantStats).not.toContain("pending");
+    expect(tenantStats).not.toContain("household");
   });
 
   it("throttles repeated failed sign-ins in the database (429) and clears on success", async () => {
