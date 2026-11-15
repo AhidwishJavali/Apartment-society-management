@@ -81,16 +81,14 @@ Timestamps are stored in UTC and displayed in the viewer's local time.
 
 ## Verification status
 
-Run on the development machine **without MySQL or MongoDB available**:
-
 | Check | Result |
 | --- | --- |
 | `npm run lint` | passes |
 | `npm run typecheck` | passes |
 | `npm run build` | passes |
 | `npm test` | 21 unit tests pass (transitions, audiences, payment rules, schemas, session tokens, env validation) |
-
-**Not yet run against live databases:** the migration, seed, and every API workflow (payments, parking, complaints, visitors, notices, feedback, permissions) were written but not exercised end-to-end. Run `npm run db:setup` and walk through the acceptance list below on a machine with MySQL and MongoDB, and fix anything that turns up.
+| `npm run db:setup` | migrations, Mongo indexes and seed run cleanly on live MySQL and MongoDB |
+| `npm run test:integration` | integration tests pass against live databases (see the README for the full list) |
 
 ### Acceptance walkthrough
 

@@ -164,7 +164,7 @@ npm run db:reset
 | --- | --- | --- | --- |
 | `admin` | Administrator | standalone | Dashboard |
 | `resident` | Resident (owner of **two** flats) | Arjun Rao: lives in and owns A-101, also owns A-201 which he rents to Rahul | Dashboard |
-| `tenant` | Resident (tenant) | Rahul Mehta, flat B-101 | Dashboard |
+| `tenant` | Resident (tenant) | Rahul Mehta, flat A-201 (rents it from Arjun) | Dashboard |
 | `maintenance` | Maintenance staff | Suresh Kumar (Electrician) | Complaints |
 | `security` | Security | Mahesh Rao (Security Guard) | Visitors |
 
