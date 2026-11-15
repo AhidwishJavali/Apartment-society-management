@@ -1,12 +1,17 @@
 {
   "title": "Apartment Society Management System",
   "subtitle": "Final Project Report - Database Management with SQL (MySQL) and NoSQL (MongoDB), built with Next.js",
-  "course": "Replace with course name and code",
-  "institution": "Replace with institution / department",
+  "course": "Database Management System (UE24CS351A)",
+  "institution": "PES University",
   "date": "November 2026",
   "students": [
-    { "name": "FILL IN: Student name 1", "srn": "FILL IN: SRN 1" },
-    { "name": "FILL IN: Student name 2", "srn": "FILL IN: SRN 2" },
-    { "name": "FILL IN: Student name 3", "srn": "FILL IN: SRN 3" }
+    {
+      "name": "Adyanth Mallur",
+      "srn": "PES1UG24CS036"
+    },
+    {
+      "name": "Ahidwish Javalli",
+      "srn": "PES1UG24CS037"
+    }
   ]
 }
