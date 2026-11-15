@@ -303,9 +303,14 @@ def sql_section(story):
     story.append(Paragraph("3.1 Database and user creation", H2))
     story.append(code_block(SQL_SETUP))
     story.append(Paragraph("3.2 Table definitions (DDL)", H2))
-    ddl = (ROOT / "prisma" / "migrations" / "20261030000000_init" / "migration.sql").read_text(encoding="utf-8")
-    ddl = "\n".join(l for l in ddl.splitlines() if not l.startswith("-- "))
-    story.append(code_block(ddl))
+    for mig in sorted((ROOT / "prisma" / "migrations").glob("2*")):
+        sql = (mig / "migration.sql").read_text(encoding="utf-8")
+        sql = "\n".join(l for l in sql.splitlines() if l.strip() and not l.startswith("-- "))
+        story.append(Paragraph(f"Migration <font face='Courier'>{esc(mig.name)}</font>", BODY))
+        story.append(code_block(sql))
+    figure = ROOT / "docs" / "ER_Diagram.png"
+    if figure.exists():
+        story.append(KeepTogether([Paragraph("Entity-relationship diagram", H2), fit_image(str(figure), CONTENT_W, 190 * mm)]))
     story.append(Paragraph("3.3 Inserts, updates and transactions", H2))
     story.append(code_block(SQL_DML))
     story.append(Paragraph("3.4 Queries and checks", H2))
@@ -503,7 +508,7 @@ def screenshots(story):
     story.append(Paragraph("Rendered from the project source files.", BODY))
     for caption, rel, marker, count, kind in CODE_SHOTS:
         img = fit_image(io.BytesIO(render_code(rel, marker, count, kind)), CONTENT_W, 120 * mm)
-        story.append(KeepTogether([Paragraph(f"<font face='Courier'>{esc(rel)}</font>", BODY), img, Paragraph(esc(caption), CAP), Spacer(1, 5 * mm)]))
+        story.append(KeepTogether([Paragraph(f"<font face='Courier'>{esc(rel)}</font>", BODY), img, Spacer(1, 5 * mm)]))
     story.append(PageBreak())
     story.append(Paragraph("6.2 Application demo", H2))
     missing = []
@@ -514,7 +519,7 @@ def screenshots(story):
         else:
             body = Placeholder(f"{name}.png - {caption}", CONTENT_W, 50 * mm)
             missing.append(name)
-        story.append(KeepTogether([Paragraph(esc(caption), BODY), body, Paragraph(f"Figure: {esc(caption)}", CAP), Spacer(1, 5 * mm)]))
+        story.append(KeepTogether([Paragraph(esc(caption), BODY), body, Spacer(1, 5 * mm)]))
     if missing:
         print("Missing demo screenshots (placeholders used):", ", ".join(missing))
 
