@@ -4,8 +4,7 @@
 
 1. Edit `report.config.json` with the team's names, SRNs, course and institution.
 2. Run the app (see the main README), then save real screenshots as PNGs in `docs/report/screenshots/` using these names:
-   `01-login`, `02-dashboard-admin`, `03-apartments`, `04-payments`, `05-parking`, `06-complaint-timeline`,
-   `07-visitors`, `08-notices`, `09-mysql-tables`, `10-mongodb-collections`.
+   the names listed in the `SCREENSHOTS` list in `build_report.py` (files 01 to 10 are already included, taken from the running app; 11 to 16 are still missing: parking, complaint timeline, visitors, notices, MySQL and MongoDB views).
 3. From the repository root run `pip install reportlab pillow pygments` once, then `python docs/report/build_report.py`.
 
 Missing screenshots appear as red placeholder boxes. Code screenshots, the SQL, the MongoDB commands and the project tree

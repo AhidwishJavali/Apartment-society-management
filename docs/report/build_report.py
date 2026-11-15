@@ -141,7 +141,7 @@ def abstract(story):
         "staff and security) sign in with hashed passwords and signed session cookies, and every API route enforces both role and record ownership "
         "on the server. Features include complaint assignment with status tracking and a chronological timeline, duplicate-bill protection, "
         "parking allocation that prevents double allocation and incompatible vehicle types, visitor search by flat and date, audience-targeted notices, "
-        "live dashboards, search, filters and pagination. The project is an academic demonstration and does not claim production-grade security.",
+        "people who own or rent several flats with one login, account requests approved by an administrator, live dashboards, search, filters and pagination. The project is an academic demonstration and does not claim production-grade security.",
     ]:
         story.append(Paragraph(esc(para), BODY))
     story.append(PageBreak())
@@ -225,9 +225,8 @@ UPDATE Vehicle SET parking_id = NULL WHERE parking_id = 11;
 UPDATE ParkingSpace SET status = 'AVAILABLE', apartment_id = NULL WHERE parking_id = 11;
 COMMIT;
 
--- Safe removal: deactivate instead of deleting history
-UPDATE Resident SET is_active = FALSE WHERE resident_id = 3;
-UPDATE UserAccount SET is_active = FALSE WHERE resident_id = 3;"""
+-- Safe removal: deactivate instead of deleting history (the login stays, it may link other flats)
+UPDATE Resident SET is_active = FALSE WHERE resident_id = 3;"""
 
 SQL_QUERIES = """SHOW TABLES;
 DESCRIBE MaintenancePayment;
@@ -279,6 +278,17 @@ JOIN Apartment a ON a.apartment_id = r.apartment_id
 LEFT JOIN ParkingSpace ps ON ps.parking_id = v.parking_id
 WHERE v.is_active = TRUE;
 
+-- Sign-up requests waiting for admin approval
+SELECT request_id, full_name, requested_role, flat_info, created_at
+FROM AccountRequest WHERE status = 'PENDING' ORDER BY created_at;
+
+-- One login that owns / rents several flats (one Resident row per person per flat)
+SELECT u.username, a.block, a.flat_no, r.resident_type
+FROM UserAccount u
+JOIN Resident r ON r.account_id = u.user_id AND r.is_active = TRUE
+JOIN Apartment a ON a.apartment_id = r.apartment_id
+ORDER BY u.username, a.block, a.flat_no;
+
 -- Consistency check: allocated slots without a vehicle (expect 0 rows)
 SELECT ps.* FROM ParkingSpace ps
 LEFT JOIN Vehicle v ON v.parking_id = ps.parking_id
@@ -288,8 +298,8 @@ WHERE ps.status = 'ALLOCATED' AND v.vehicle_id IS NULL;"""
 def sql_section(story):
     story.append(Paragraph("3. SQL - Database Commands (MySQL)", H1))
     story.append(Paragraph("The relational schema has the seven agreed core tables (Apartment, Resident, Staff, ParkingSpace, Vehicle, "
-                           "MaintenancePayment, Complaint) plus a UserAccount table for authentication. The DDL below is the migration "
-                           "applied by <font face='Courier'>npm run db:migrate</font>; it is generated from <font face='Courier'>prisma/schema.prisma</font>.", BODY))
+                           "MaintenancePayment, Complaint) plus supporting tables for authentication (UserAccount, LoginAttempt, AccountRequest). "
+                           "The DDL below is the sequence of migrations applied by <font face='Courier'>npm run db:migrate</font>; it is generated from <font face='Courier'>prisma/schema.prisma</font>.", BODY))
     story.append(Paragraph("3.1 Database and user creation", H2))
     story.append(code_block(SQL_SETUP))
     story.append(Paragraph("3.2 Table definitions (DDL)", H2))
@@ -459,16 +469,22 @@ CODE_SHOTS = [
 ]
 
 SCREENSHOTS = [
-    ("01-login", "Login page"),
-    ("02-dashboard-admin", "Administrator dashboard with live counts"),
-    ("03-apartments", "Apartments list with search"),
-    ("04-payments", "Maintenance payments with paid / pending totals"),
-    ("05-parking", "Parking slots with allocate / release"),
-    ("06-complaint-timeline", "Complaint details with activity timeline"),
-    ("07-visitors", "Visitor entry / exit and history search"),
-    ("08-notices", "Notices management"),
-    ("09-mysql-tables", "MySQL: SHOW TABLES / row counts"),
-    ("10-mongodb-collections", "MongoDB: collections and sample documents"),
+    ("01-login", "Login page with link to request an account"),
+    ("02-dashboard-admin", "Administrator dashboard: live counts, maintenance by month, complaints by status"),
+    ("03-request-account", "Public account-request form"),
+    ("04-account-requests-admin", "Administrator reviews and approves an account request"),
+    ("05-dashboard-owner", "Owner dashboard for a person who owns two flats"),
+    ("06-payments-owner", "Owner's maintenance payments across both flats, with paid / pending totals"),
+    ("07-dashboard-tenant", "Tenant dashboard: complaints, parking and vehicles, no bills"),
+    ("08-payments-tenant-denied", "Tenant opening /payments directly: refused by the server"),
+    ("09-complaint-which-flat", "New complaint asks which flat it is about"),
+    ("10-accounts-admin", "Administrator accounts page: one login linked to several flats"),
+    ("11-parking", "Parking slots with allocate / release"),
+    ("12-complaint-timeline", "Complaint details with MongoDB activity timeline"),
+    ("13-visitors", "Visitor entry / exit and history search (MongoDB)"),
+    ("14-notices", "Notices management (MongoDB)"),
+    ("15-mysql-tables", "MySQL: SHOW TABLES and row counts"),
+    ("16-mongodb-collections", "MongoDB: collections and sample documents"),
 ]
 
 
@@ -494,9 +510,9 @@ def screenshots(story):
     for name, caption in SCREENSHOTS:
         path = SHOT_DIR / f"{name}.png"
         if path.exists():
-            body = fit_image(str(path), CONTENT_W, 110 * mm)
+            body = fit_image(str(path), CONTENT_W, 88 * mm)
         else:
-            body = Placeholder(f"{name}.png - {caption}", CONTENT_W, 60 * mm)
+            body = Placeholder(f"{name}.png - {caption}", CONTENT_W, 50 * mm)
             missing.append(name)
         story.append(KeepTogether([Paragraph(esc(caption), BODY), body, Paragraph(f"Figure: {esc(caption)}", CAP), Spacer(1, 5 * mm)]))
     if missing:
