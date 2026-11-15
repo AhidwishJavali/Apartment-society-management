@@ -9,3 +9,5 @@
 
 Missing screenshots appear as red placeholder boxes. Code screenshots, the SQL, the MongoDB commands and the project tree
 are regenerated from the repository each time.
+
+The PDF is committed so it can be submitted directly; rebuild it after changing the config or screenshots.
